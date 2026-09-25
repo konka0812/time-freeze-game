@@ -3,3 +3,4 @@ tools/
 *.pyc
 Thumbs.db
 patch_*.py
+assets_gen4_*.py

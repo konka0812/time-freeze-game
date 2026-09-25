@@ -451,6 +451,9 @@ function sectionHeader(x, y, cn, en) {
   ctx.fillText(en, x, y + 48);
   ls('0px');
 }
+function vib(ms) {
+  try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {}
+}
 function dots(x, y, n, total = 3) {
   for (let i = 0; i < total; i++) {
     ctx.fillStyle = i < n ? '#e03131' : 'rgba(255,255,255,0.15)';
@@ -475,6 +478,14 @@ const WPN = {
   shotgun: { name: '霰弹', en: 'SCATTER' },
   smg: { name: '微冲', en: 'SMG' },
 };
+
+const BSTYLE = {
+  p:     { gs: 8,  trail: 14, wm: 1.0,  core: '#ffffff' },
+  sg:    { gs: 10, trail: 12, wm: 1.5,  core: '#fff3d6' },
+  smg:   { gs: 6,  trail: 8,  wm: 0.8,  core: '#f4ffd6' },
+  focus: { gs: 11, trail: 22, wm: 1.2,  core: '#eaffff' },
+  e:     { gs: 8,  trail: 14, wm: 1.0,  core: '#ffffff' },
+};
 const STAGES = [
   { key: 'std', cn: '标准', en: 'STANDARD' },
   { key: 'storm', cn: '雷雨', en: 'STORM' },
@@ -482,7 +493,7 @@ const STAGES = [
   { key: 'fog', cn: '迷雾', en: 'FOG' },
   { key: 'lowg', cn: '低重力', en: 'LOW-G' },
 ];
-let player, bullets, enemies, shards, telegraphs, flashes, floats, rings, dusts = [], stains = [], items = [], covers = [], hist = [], deathReplay = null, replayT = 0, moments = [], mines = [], supT = 0, focusT = 0, rains = [], pools = [], fogs = [], poolGrace = 0, stageKey = 'std', stageName = '标准 STANDARD', crates = [], crateT = 6;
+let player, bullets, enemies, shards, telegraphs, flashes, floats, rings, dusts = [], stains = [], items = [], covers = [], hist = [], deathReplay = null, replayT = 0, moments = [], mines = [], supT = 0, focusT = 0, rains = [], pools = [], fogs = [], poolGrace = 0, stageKey = 'std', stageName = '标准 STANDARD', crates = [], crateT = 6, shots = 0, hitsN = 0, hitMarkT = 0;
 let best = { score: 0, wave: 0, kills: 0 };
 try { best = JSON.parse(localStorage.getItem('tf_best_v2')) || best; } catch (e) {}
 let top5 = [];
@@ -559,13 +570,14 @@ function addFloat(x, y, text, color, size = 22) {
 }
 
 /* ---------- 实体 ---------- */
-function fireBullet(x, y, angle, speed, fromPlayer, tint, life, pierce) {
+function fireBullet(x, y, angle, speed, fromPlayer, tint, life, pierce, bkind) {
+  if (fromPlayer) shots++;
   if (stageKey === 'lowg') speed *= 0.7;
   else if (stageKey === 'storm') speed *= 1.12;
   bullets.push({
     x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
     r: 5.5, fromPlayer, trail: [], tint: tint || '#e9e9ee',
-    grazed: false, tw: rand(0, TAU), life: life === undefined ? Infinity : life, pierce: pierce || 0,
+    grazed: false, tw: rand(0, TAU), life: life === undefined ? Infinity : life, pierce: pierce || 0, kind: bkind || (fromPlayer ? 'p' : 'e'),
   });
 }
 
@@ -628,6 +640,7 @@ function damagePlayer() {
     }
     shatter(player.x, player.y, '#9fc0ff', 10, 0.8);
     addFloat(player.x, player.y - 36, '护盾 -1', '#8fb0ff', 20);
+    vib(60);
     sfx.shieldHit();
     return;
   }
@@ -635,6 +648,7 @@ function damagePlayer() {
   player.invulnT = 1.0;
   redFlash = Math.max(redFlash, 0.45);
   shake = Math.max(shake, 10);
+  vib(90);
   addFloat(player.x, player.y - 36, '-1', '#ff5252', 22);
   sfx.hurt();
   if (player.hp <= 0) killPlayer();
@@ -655,6 +669,7 @@ function addScore(base) {
 function killEnemyAt(idx) {
   const e = enemies[idx];
   kills++;
+  vib(25);
   rings.push({ x: e.x, y: e.y, r: 6, v: 640, a: 0.7, c: '#ffb3b3' });
   whiteFlash = Math.max(whiteFlash, 0.07);
   shatter(e.x, e.y, '#ffb3b3', 5, 0.45);
@@ -717,13 +732,13 @@ function startGame() {
   timeSmooth = 0; timePulse = 0; wasFrozen = true;
   shake = 0; zoomPulse = 0; hitStop = 0; redFlash = 0;
   demoT = 0;
-  player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: 20, angle: -Math.PI / 2, fireCd: 0, trail: [], dashT: 0, dashCd: 0, invulnT: 0, shield: 0, hp: 3, hpMax: 3, weapon: 'pistol', wKind: '', wAmmo: 0, wTime: 0 };
+  player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: 20, angle: -Math.PI / 2, fireCd: 0, trail: [], dashT: 0, dashCd: 0, invulnT: 0, shield: 0, hp: 5, hpMax: 5, weapon: 'pistol', wpn: 'pistol', wKind: '', wAmmo: 0, wTime: 0, wTimeMax: 1 };
   bullets = []; enemies = []; shards = []; telegraphs = []; flashes = []; floats = []; rings = [];
   dusts = [];
   for (let i = 0; i < 46; i++)
     dusts.push({ x: rand(ARENA.x, ARENA.x + ARENA.w), y: rand(ARENA.y, ARENA.y + ARENA.h),
       vx: rand(-9, 9), vy: rand(-7, 7), r: rand(0.8, 2.3), ph: rand(0, TAU) });
-  tickT = 0; hbT = 0; slowAllT = 0; slowmoT = 0; stains = []; items = []; mines = []; supT = 0; focusT = 0; crates = []; crateT = 6; rains = []; pools = []; fogs = []; poolGrace = 0; stageKey = 'std'; stageName = '标准 STANDARD';
+  tickT = 0; hbT = 0; slowAllT = 0; slowmoT = 0; stains = []; items = []; mines = []; supT = 0; focusT = 0; shots = 0; hitsN = 0; hitMarkT = 0; crates = []; crateT = 6; rains = []; pools = []; fogs = []; poolGrace = 0; stageKey = 'std'; stageName = '标准 STANDARD';
   covers = makeCovers(); hist = []; deathReplay = null; replayT = 0; moments = []; bgmStep = 0; bgmT = 0;
   nextWave();
 }
@@ -833,25 +848,23 @@ function update(dt) {
           player.fireCd = 0.55;
           timePulse = Math.max(timePulse, 0.65);
           for (let pi = 0; pi < 5; pi++)
-            fireBullet(mx, my, player.angle + rand(-0.22, 0.22), rand(540, 660), true, '#ffd9a0', 0.55);
-          flashes.push({ x: mx, y: my, a: player.angle, t: 0.09 });
+            fireBullet(mx, my, player.angle + rand(-0.22, 0.22), rand(540, 660), true, '#ffb45c', 0.55, 0, 'sg');
+          flashes.push({ x: mx, y: my, a: player.angle, t: 0.12, size: 38, col: '255,160,70' });
           shake = Math.max(shake, 8);
           sfx.shotgun();
         } else {
           player.fireCd = 0.09;
           timePulse = Math.max(timePulse, 0.16);
-          fireBullet(mx, my, player.angle + rand(-0.06, 0.06), 700, true, '#e9f5c8');
-          flashes.push({ x: mx, y: my, a: player.angle, t: 0.04 });
+          fireBullet(mx, my, player.angle + rand(-0.06, 0.06), 700, true, '#d4e88f', undefined, 0, 'smg');
+          flashes.push({ x: mx, y: my, a: player.angle, t: 0.045, size: 16, col: '210,255,160' });
           shake = Math.max(shake, 2);
           sfx.smg();
         }
-        for (let ci = 0; ci < 1; ci++) {
-          const side2 = Math.random() < 0.5 ? 1 : -1;
-          const ca2 = player.angle + Math.PI / 2 * side2;
-          shards.push({ x: player.x + Math.cos(player.angle) * 20, y: player.y + Math.sin(player.angle) * 20,
-            vx: Math.cos(ca2) * rand(70, 150), vy: Math.sin(ca2) * rand(70, 150),
-            rot: rand(0, TAU), vr: rand(-16, 16), size: 3, color: '#d8b45c', life: rand(0.8, 1.2), shape: 'rect' });
-        }
+        const side2 = Math.random() < 0.5 ? 1 : -1;
+        const ca2 = player.angle + Math.PI / 2 * side2;
+        shards.push({ x: player.x + Math.cos(player.angle) * 20, y: player.y + Math.sin(player.angle) * 20,
+          vx: Math.cos(ca2) * rand(70, 150), vy: Math.sin(ca2) * rand(70, 150),
+          rot: rand(0, TAU), vr: rand(-16, 16), size: 3, color: '#d8b45c', life: rand(0.8, 1.2), shape: 'rect' });
       }
     } else if (ammo > 0) {
       ammo--;
@@ -860,7 +873,7 @@ function update(dt) {
       let shotPierce = 0;
       if (focusT >= 1.2) { shotPierce = 2; focusT = 0; addFloat(player.x, player.y - 40, '凝神·透', '#bff3ff', 20); tone('triangle', 880, 1320, 0.14, 0.18); }
       fireBullet(mx, my, player.angle + rand(-0.012, 0.012), 650, true, undefined, undefined, shotPierce);
-      flashes.push({ x: mx, y: my, a: player.angle, t: 0.07 });
+      flashes.push({ x: mx, y: my, a: player.angle, t: 0.07, size: 26, col: '255,220,120' });
       shake = Math.max(shake, 4);
       sfx.shoot();
       const side = Math.random() < 0.5 ? 1 : -1;
@@ -1214,6 +1227,7 @@ function update(dt) {
         if (e.birth > 0) continue;
         if (dist2(b.x, b.y, e.x, e.y) < (b.r + e.r) * (b.r + e.r)) {
           const dmg = b.pierce ? 2 : 1;
+          if (!b.hitCounted) { b.hitCounted = true; hitsN++; hitMarkT = 0.12; }
           if ((e.kind === 'heavy' || e.kind === 'boss') && e.hp > dmg) {
             e.hp -= dmg; e.hitFlash = 0.12;
             shatter(b.x, b.y, '#e03131', 5, 0.5);
@@ -1510,24 +1524,25 @@ function render() {
   /* 子弹 */
   const frozen = timeSmooth < 0.06;
   for (const b of bullets) {
+    const sty = BSTYLE[b.kind] || BSTYLE.p;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     for (let i = 1; i < b.trail.length; i++) {
       const pr = i / b.trail.length;
       ctx.strokeStyle = b.tint;
-      ctx.globalAlpha = Math.pow(pr, 1.6) * 0.55;
-      ctx.lineWidth = b.r * 2.1 * pr;
+      ctx.globalAlpha = Math.pow(pr, 1.6) * 0.6;
+      ctx.lineWidth = b.r * 2.1 * sty.wm * pr;
       ctx.beginPath();
       ctx.moveTo(b.trail[i - 1][0], b.trail[i - 1][1]);
       ctx.lineTo(b.trail[i][0], b.trail[i][1]);
       ctx.stroke();
     }
-    const gs = b.r * (b.pierce ? 11 : 8);
+    const gs = b.r * sty.gs * 1.4;
     ctx.globalAlpha = 0.9;
-    ctx.drawImage(b.fromPlayer ? GLOW_WARM() : GLOW_ENEMY(), b.x - gs / 2, b.y - gs / 2, gs, gs);
+    ctx.drawImage(b.fromPlayer ? glowFor('g_' + b.kind, 'rgba(255,238,190,0.95)') : GLOW_ENEMY(), b.x - gs / 2, b.y - gs / 2, gs, gs);
     ctx.restore();
-    ctx.fillStyle = '#fff';
-    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * 0.6, 0, TAU); ctx.fill();
+    ctx.fillStyle = sty.core;
+    ctx.beginPath(); ctx.arc(b.x, b.y, b.r * (b.kind === 'sg' ? 0.75 : 0.6), 0, TAU); ctx.fill();
     if (frozen) {   // 冻结时子弹闪光
       const tw = (Math.sin(performance.now() / 300 + b.tw) + 1) / 2;
       ctx.strokeStyle = 'rgba(255,255,255,' + (0.25 + tw * 0.5) + ')';
@@ -1904,14 +1919,14 @@ function renderHUD() {
   ctx.font = 'bold 30px ' + FONT;
   ctx.fillText('第 ' + wave + ' 波', 24, 62);
   /* 生命 & 护盾 */
-  for (let i2 = 0; i2 < 3; i2++) {
+  for (let i2 = 0; i2 < 5; i2++) {
     ctx.fillStyle = i2 < player.hp ? '#ff5252' : 'rgba(255,255,255,0.16)';
-    roundRectPath(24 + i2 * 25, 74, 20, 13, 4); ctx.fill();
+    roundRectPath(24 + i2 * 24, 74, 19, 12, 3); ctx.fill();
   }
   if (player.shield > 0)
     for (let i2 = 0; i2 < player.shield; i2++) {
       ctx.fillStyle = '#8fb0ff';
-      roundRectPath(104 + i2 * 19, 76, 14, 10, 3); ctx.fill();
+      roundRectPath(148 + i2 * 18, 75, 13, 10, 3); ctx.fill();
     }
   ctx.font = '13px ' + FONT;
   ctx.fillStyle = 'rgba(255,255,255,0.55)';
@@ -2031,7 +2046,7 @@ function renderHUD() {
   } else {
     ls('2px');
     ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = EN;
-    ctx.fillText(reloadT > 0 ? 'RELOADING' : 'AMMO · R', W - 36, H - 66);
+    ctx.fillText(WPN.pistol.en + ' · R', W - 36, H - 66);
     ls('0px');
   const tw = 10, gap = 7, total = MAG * tw + (MAG - 1) * gap;
   const blink = reloadT > 0 && (performance.now() / 200 | 0) % 2 === 0;
