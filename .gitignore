@@ -2,3 +2,4 @@ assets_raw/
 tools/
 *.pyc
 Thumbs.db
+patch_*.py
