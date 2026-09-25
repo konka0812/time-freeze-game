@@ -1,0 +1,4 @@
+assets_raw/
+tools/
+*.pyc
+Thumbs.db
