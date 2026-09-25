@@ -1686,7 +1686,8 @@ function render() {
   }
   drawGrain();
   drawCrosshair();
-  if (TOUCH && innerHeight > innerWidth && state !== 'loading') {
+  const coarse = window.matchMedia && matchMedia('(pointer: coarse)').matches;
+  if (TOUCH && coarse && innerHeight > innerWidth && state !== 'loading') {
     ctx.fillStyle = 'rgba(8,8,10,0.9)'; ctx.fillRect(0, 0, W, H);
     ctx.textAlign = 'center';
     ctx.fillStyle = '#fff'; ctx.font = 'bold 40px ' + FONT;
