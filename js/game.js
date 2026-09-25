@@ -2589,7 +2589,7 @@ function renderTitle() {
   /* 开始按钮 */
   drawButton(84, 600, 218, 58, '开始游戏', 'START', () => { initAudio(); startGame(); });
   drawButton(318, 600, 218, 58, '敌人图鉴', 'CODEX', () => { state = 'codex'; });
-  iconBtn(W - 84, 38, 17, () => toggleMute(), () => drawSpeakerGlyph(W - 84, 38, muted));
+  iconBtn(W - 44, H - 44, 17, () => toggleMute(), () => drawSpeakerGlyph(W - 44, H - 44, muted));
 
   /* 页脚 */
   ctx.textAlign = 'left';
