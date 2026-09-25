@@ -228,9 +228,10 @@ Promise.all([
   loadImg('cover', 'assets/cover.png'),
 ]).then(() => {
   assetsReady = true;
-  if (DEMO) startGame();
-  else if (new URLSearchParams(location.search).has('codex')) state = 'codex';
-  else state = 'title';
+  if (!DEMO) {
+    if (new URLSearchParams(location.search).has('codex')) state = 'codex';
+    else state = 'title';
+  }
 });
 
 /* ---------- 音频（程序合成 v2） ---------- */
@@ -2442,3 +2443,4 @@ function loop(now) {
   requestAnimationFrame(loop);
 }
 requestAnimationFrame(loop);
+if (DEMO) { try { startGame(); } catch (e8) { window.__bootErr = String(e8); state = 'title'; } }
