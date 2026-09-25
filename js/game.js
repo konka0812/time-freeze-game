@@ -300,6 +300,8 @@ const sfx = {
   shieldHit() { tone('triangle', 1250, 320, 0.2, 0.3); noiseHit(0.1, 'highpass', 2200, 0.2); },
   pickup() { tone('triangle', 660, 990, 0.13, 0.2); },
   pulse() { tone('sawtooth', 300, 50, 0.8, 0.2); noiseHit(0.6, 'lowpass', 400, 0.35, 80); },
+  hurt() { tone('sawtooth', 160, 60, 0.18, 0.3); noiseHit(0.1, 'lowpass', 500, 0.3); },
+  smg() { noiseHit(0.05, 'bandpass', 1800, 0.3); tone('square', 260, 90, 0.05, 0.18); },
   shotgun() { noiseHit(0.18, 'lowpass', 900, 0.6, 200); tone('sine', 95, 45, 0.16, 0.4); }
 };
 
@@ -316,7 +318,10 @@ addEventListener('keydown', e => {
     settings.vol = clamp(+(settings.vol + (e.code === 'BracketRight' ? 0.1 : -0.1)).toFixed(2), 0, 1);
     saveSettings(); if (master && !muted) master.gain.value = settings.vol;
   }
-  if (e.code === 'KeyQ' && state === 'playing' && player && player.sg > 0) { player.weapon = player.weapon === 'shotgun' ? 'pistol' : 'shotgun'; sfx.reload0(); }
+  if (e.code === 'KeyQ' && state === 'playing' && player && player.wKind && player.wAmmo > 0 && player.wTime > 0) {
+    player.wpn = player.wpn === 'pistol' ? player.wKind : 'pistol';
+    sfx.reload0();
+  }
   if (e.code === 'KeyP' && state === 'playing') paused = !paused;
   if ((e.code === 'KeyR') && state === 'playing') tryReload();
 });
@@ -455,6 +460,11 @@ let ammo = 8, MAG = 8, reloadT = 0;
 let waveBanner = 0, waveBannerText = '', quoteText = '', quoteT = 0;
 let demoT = 0, deadLine = '', tickT = 0, hbT = 0, slowAllT = 0, slowmoT = 0, whiteFlash = 0, bgmStep = 0, bgmT = 0;
 const BGM_PAT = [0, 3, 7, 10, 12, 10, 7, 3, 0, 3, 8, 7, 5, 3, 2, -2];
+const WPN = {
+  pistol: { name: '手枪', en: 'PISTOL' },
+  shotgun: { name: '霰弹', en: 'SCATTER' },
+  smg: { name: '微冲', en: 'SMG' },
+};
 const STAGES = [
   { key: 'std', cn: '标准', en: 'STANDARD' },
   { key: 'storm', cn: '雷雨', en: 'STORM' },
@@ -462,7 +472,7 @@ const STAGES = [
   { key: 'fog', cn: '迷雾', en: 'FOG' },
   { key: 'lowg', cn: '低重力', en: 'LOW-G' },
 ];
-let player, bullets, enemies, shards, telegraphs, flashes, floats, rings, dusts = [], stains = [], items = [], covers = [], hist = [], deathReplay = null, replayT = 0, moments = [], mines = [], supT = 0, focusT = 0, rains = [], pools = [], fogs = [], poolGrace = 0, stageKey = 'std', stageName = '标准 STANDARD';
+let player, bullets, enemies, shards, telegraphs, flashes, floats, rings, dusts = [], stains = [], items = [], covers = [], hist = [], deathReplay = null, replayT = 0, moments = [], mines = [], supT = 0, focusT = 0, rains = [], pools = [], fogs = [], poolGrace = 0, stageKey = 'std', stageName = '标准 STANDARD', crates = [], crateT = 6;
 let best = { score: 0, wave: 0, kills: 0 };
 try { best = JSON.parse(localStorage.getItem('tf_best_v2')) || best; } catch (e) {}
 let top5 = [];
@@ -589,8 +599,9 @@ function killPlayer() {
 
 function damagePlayer() {
   if (player.invulnT > 0) return;
-  if (player.shield) {
-    player.shield = false; player.invulnT = 0.35;
+  if (player.shield > 0) {
+    player.shield--;
+    player.invulnT = 0.35;
     rings.push({ x: player.x, y: player.y, r: 22, v: 700, a: 0.65, c: '#8fb0ff' });
     rings.push({ x: player.x, y: player.y, r: 30, v: 1000, a: 0.5, c: '#cfe0ff' });
     for (let i2 = bullets.length - 1; i2 >= 0; i2--) {
@@ -605,12 +616,18 @@ function damagePlayer() {
       const k3 = Math.hypot(kx3, ky3) || 1;
       if (k3 < 170) { en.x += kx3 / k3 * (170 - k3) * 0.9; en.y += ky3 / k3 * (170 - k3) * 0.9; }
     }
-    shatter(player.x, player.y, '#9fc0ff', 12, 0.8);
-    addFloat(player.x, player.y - 36, '护盾碎裂!', '#8fb0ff', 20);
+    shatter(player.x, player.y, '#9fc0ff', 10, 0.8);
+    addFloat(player.x, player.y - 36, '护盾 -1', '#8fb0ff', 20);
     sfx.shieldHit();
     return;
   }
-  killPlayer();
+  player.hp--;
+  player.invulnT = 1.0;
+  redFlash = Math.max(redFlash, 0.45);
+  shake = Math.max(shake, 10);
+  addFloat(player.x, player.y - 36, '-1', '#ff5252', 22);
+  sfx.hurt();
+  if (player.hp <= 0) killPlayer();
 }
 
 function addScore(base) {
@@ -639,6 +656,7 @@ function killEnemyAt(idx) {
     stains.push({ x: e.x, y: e.y, r: 72, life: 6 });
     items.push({ x: e.x - 34, y: e.y, kind: 'shield', t: 0 });
     items.push({ x: e.x + 34, y: e.y, kind: 'slow', t: 0 });
+    if (player.hp < player.hpMax) { player.hp = Math.min(player.hpMax, player.hp + 1); addFloat(player.x, player.y - 52, '生命 +1', '#7bd88f', 20); }
     sfx.death();
   }
   shatter(e.x, e.y, '#e03131', e.kind === 'heavy' ? 34 : 22, e.kind === 'heavy' ? 1.3 : 1);
@@ -666,7 +684,15 @@ function doDash() {
   rings.push({ x: player.x, y: player.y, r: 8, v: 820, a: 0.5, c: '#dfe8ff' });
 }
 
+function switchWeapon(w) {
+  if (player.wpn === w) return;
+  player.wpn = w;
+  if (w === 'pistol') addFloat(player.x, player.y - 40, '切回手枪', '#c9c9d4', 16);
+  sfx.reload0();
+}
+
 function tryReload() {
+  if (player.wpn !== 'pistol') return;
   if (reloadT > 0 || ammo === MAG) return;
   reloadT = 1.1;
   sfx.reload0();
@@ -681,13 +707,13 @@ function startGame() {
   timeSmooth = 0; timePulse = 0; wasFrozen = true;
   shake = 0; zoomPulse = 0; hitStop = 0; redFlash = 0;
   demoT = 0;
-  player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: 20, angle: -Math.PI / 2, fireCd: 0, trail: [], dashT: 0, dashCd: 0, invulnT: 0, shield: false, weapon: 'pistol', sg: 0 };
+  player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: 20, angle: -Math.PI / 2, fireCd: 0, trail: [], dashT: 0, dashCd: 0, invulnT: 0, shield: 0, hp: 3, hpMax: 3, weapon: 'pistol', wKind: '', wAmmo: 0, wTime: 0 };
   bullets = []; enemies = []; shards = []; telegraphs = []; flashes = []; floats = []; rings = [];
   dusts = [];
   for (let i = 0; i < 46; i++)
     dusts.push({ x: rand(ARENA.x, ARENA.x + ARENA.w), y: rand(ARENA.y, ARENA.y + ARENA.h),
       vx: rand(-9, 9), vy: rand(-7, 7), r: rand(0.8, 2.3), ph: rand(0, TAU) });
-  tickT = 0; hbT = 0; slowAllT = 0; slowmoT = 0; stains = []; items = []; mines = []; supT = 0; focusT = 0; rains = []; pools = []; fogs = []; poolGrace = 0; stageKey = 'std'; stageName = '标准 STANDARD';
+  tickT = 0; hbT = 0; slowAllT = 0; slowmoT = 0; stains = []; items = []; mines = []; supT = 0; focusT = 0; crates = []; crateT = 6; rains = []; pools = []; fogs = []; poolGrace = 0; stageKey = 'std'; stageName = '标准 STANDARD';
   covers = makeCovers(); hist = []; deathReplay = null; replayT = 0; moments = []; bgmStep = 0; bgmT = 0;
   nextWave();
 }
@@ -787,21 +813,33 @@ function update(dt) {
   if (mouse.down && reloadT <= 0 && player.fireCd <= 0) {
     const mx = player.x + Math.cos(player.angle) * 30;
     const my = player.y + Math.sin(player.angle) * 30;
-    if (player.weapon === 'shotgun') {
-      player.sg--;
-      player.fireCd = 0.55;
-      timePulse = Math.max(timePulse, 0.65);
-      for (let pi = 0; pi < 5; pi++)
-        fireBullet(mx, my, player.angle + rand(-0.22, 0.22), rand(540, 660), true, '#ffd9a0', 0.55);
-      flashes.push({ x: mx, y: my, a: player.angle, t: 0.09 });
-      shake = Math.max(shake, 8);
-      sfx.shotgun();
-      for (let ci = 0; ci < 2; ci++) {
-        const side2 = Math.random() < 0.5 ? 1 : -1;
-        const ca2 = player.angle + Math.PI / 2 * side2;
-        shards.push({ x: player.x + Math.cos(player.angle) * 20, y: player.y + Math.sin(player.angle) * 20,
-          vx: Math.cos(ca2) * rand(80, 170), vy: Math.sin(ca2) * rand(80, 170),
-          rot: rand(0, TAU), vr: rand(-16, 16), size: 3, color: '#d8b45c', life: rand(0.9, 1.4), shape: 'rect' });
+    if (player.wpn === 'shotgun' || player.wpn === 'smg') {
+      if (player.wAmmo <= 0) { switchWeapon('pistol'); player.fireCd = 0.3; }
+      else {
+        player.wAmmo--;
+        if (player.wpn === 'shotgun') {
+          player.fireCd = 0.55;
+          timePulse = Math.max(timePulse, 0.65);
+          for (let pi = 0; pi < 5; pi++)
+            fireBullet(mx, my, player.angle + rand(-0.22, 0.22), rand(540, 660), true, '#ffd9a0', 0.55);
+          flashes.push({ x: mx, y: my, a: player.angle, t: 0.09 });
+          shake = Math.max(shake, 8);
+          sfx.shotgun();
+        } else {
+          player.fireCd = 0.09;
+          timePulse = Math.max(timePulse, 0.16);
+          fireBullet(mx, my, player.angle + rand(-0.06, 0.06), 700, true, '#e9f5c8');
+          flashes.push({ x: mx, y: my, a: player.angle, t: 0.04 });
+          shake = Math.max(shake, 2);
+          sfx.smg();
+        }
+        for (let ci = 0; ci < 1; ci++) {
+          const side2 = Math.random() < 0.5 ? 1 : -1;
+          const ca2 = player.angle + Math.PI / 2 * side2;
+          shards.push({ x: player.x + Math.cos(player.angle) * 20, y: player.y + Math.sin(player.angle) * 20,
+            vx: Math.cos(ca2) * rand(70, 150), vy: Math.sin(ca2) * rand(70, 150),
+            rot: rand(0, TAU), vr: rand(-16, 16), size: 3, color: '#d8b45c', life: rand(0.8, 1.2), shape: 'rect' });
+        }
       }
     } else if (ammo > 0) {
       ammo--;
@@ -876,14 +914,39 @@ function update(dt) {
     }
   } else if (rains.length) rains.length = 0;
   if (stageKey === 'fog') for (const f2 of fogs) { f2.x += f2.vx * dt; f2.y += f2.vy * dt; }
+  /* 武器时效 */
+  if (player.wpn !== 'pistol' && player.wTime > 0) {
+    player.wTime -= dt;
+    if (player.wTime <= 0) { switchWeapon('pistol'); addFloat(player.x, player.y - 44, '武器时效已尽', '#c9c9d4', 16); }
+  }
+  /* 武器箱空投 */
+  crateT -= dt;
+  if (crateT <= 0) {
+    crateT = rand(13, 20);
+    const ck = Math.random() < 0.55 ? 'shotgun' : 'smg';
+    crates.push({ x: rand(ARENA.x + 120, ARENA.x + ARENA.w - 120), y: rand(ARENA.y + 120, ARENA.y + ARENA.h - 120), kind: ck, t: 0 });
+  }
+  for (let i = crates.length - 1; i >= 0; i--) {
+    const c2 = crates[i];
+    c2.t += dt;
+    if (c2.t > 10) { crates.splice(i, 1); continue; }
+    if (dist2(c2.x, c2.y, player.x, player.y) < 32 * 32) {
+      player.wKind = c2.kind; player.wpn = c2.kind;
+      player.wAmmo = c2.kind === 'shotgun' ? 6 : 30;
+      player.wTime = player.wTimeMax = c2.kind === 'shotgun' ? 12 : 10;
+      addFloat(c2.x, c2.y - 26, (c2.kind === 'shotgun' ? '霰弹' : '微冲') + ' ×' + player.wAmmo, '#ffd9a0', 20);
+      sfx.pickup();
+      crates.splice(i, 1);
+    }
+  }
   /* 道具 */
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
     it.t += dt;
     if (it.t > 14) { items.splice(i, 1); continue; }
     if (dist2(it.x, it.y, player.x, player.y) < 32 * 32) {
-      if (it.kind === 'shield') { player.shield = true; addFloat(it.x, it.y - 26, '护盾 +1', '#cfe0ff', 20); }
-      else if (it.kind === 'shotgun') { player.sg += 6; player.weapon = 'shotgun'; addFloat(it.x, it.y - 26, '霰弹 +6 (Q切换)', '#ffd9a0', 20); }
+      if (it.kind === 'shield') { player.shield = Math.min(4, player.shield + 2); addFloat(it.x, it.y - 26, '护盾 +2', '#cfe0ff', 20); }
+      else if (it.kind === 'shotgun') { player.wKind = 'shotgun'; player.wpn = 'shotgun'; player.wAmmo += 6; player.wTime = Math.max(player.wTime, 12); addFloat(it.x, it.y - 26, '霰弹 +6 (Q切换)', '#ffd9a0', 20); }
       else { slowAllT = 6; addFloat(it.x, it.y - 26, '时间迟缓 6s', '#8fb0ff', 20); }
       sfx.pickup();
       rings.push({ x: it.x, y: it.y, r: 10, v: 540, a: 0.55, c: it.kind === 'shield' ? '#cfe0ff' : '#8fb0ff' });
@@ -925,14 +988,14 @@ function update(dt) {
       if (t.kind === 'shooter')
         enemies.push({ kind: 'shooter', x: t.x, y: t.y, r: 20, hp: 1, angle: -Math.PI / 2, cd: rand(0.8, 1.6), strafe: Math.random() < 0.5 ? 1 : -1, birth: 0.5 });
       else if (t.kind === 'rusher')
-        enemies.push({ kind: 'rusher', x: t.x, y: t.y, r: 20, hp: 1, angle: -Math.PI / 2, cd: rand(0.2, 0.6), dashT: 0, windT: 0, birth: 0.5 });
+        enemies.push({ kind: 'rusher', x: t.x, y: t.y, r: 20, hp: 2, hpMax: 2, angle: -Math.PI / 2, cd: rand(0.2, 0.6), dashT: 0, windT: 0, birth: 0.5 });
       else if (t.kind === 'sniper')
         enemies.push({ kind: 'sniper', x: t.x, y: t.y, r: 18, hp: 1, angle: -Math.PI / 2, cd: rand(1.0, 1.8), aimT: 0, locked: false, lockAngle: 0, strafe: Math.random() < 0.5 ? 1 : -1, birth: 0.5 });
       else if (t.kind === 'miner')
-        enemies.push({ kind: 'miner', x: t.x, y: t.y, r: 20, hp: 2, angle: -Math.PI / 2, dir: Math.random() < 0.5 ? 1 : -1, dropT: 0.5, birth: 0.5 });
+        enemies.push({ kind: 'miner', x: t.x, y: t.y, r: 20, hp: 2, hpMax: 2, angle: -Math.PI / 2, dir: Math.random() < 0.5 ? 1 : -1, dropT: 0.5, birth: 0.5 });
       else if (t.kind === 'echo') {
         const hs2 = hist.length ? hist[Math.max(0, hist.length - 70)] : null;
-        enemies.push({ kind: 'echo', x: hs2 ? hs2.p[0] : player.x, y: hs2 ? hs2.p[1] : player.y, r: 20, hp: 2, angle: -Math.PI / 2, prog: Math.max(0, hist.length - 70), fireT: rand(1.4, 2.2), birth: 0.7 });
+        enemies.push({ kind: 'echo', x: hs2 ? hs2.p[0] : player.x, y: hs2 ? hs2.p[1] : player.y, r: 20, hp: 2, hpMax: 2, angle: -Math.PI / 2, prog: Math.max(0, hist.length - 70), fireT: rand(1.4, 2.2), birth: 0.7 });
       }
       else if (t.kind === 'boss')
         enemies.push({ kind: 'boss', x: t.x, y: t.y, r: 46, hp: 150, hpMax: 150, angle: -Math.PI / 2, cd: 2.2, spiralA: 0, spiralT: 0, spT: 0, fanT: 0, fanN: 0, fT: 0, atkN: 0, hitFlash: 0, birth: 0.9, pulseCd: 7, pulseTele: 0 });
@@ -1252,7 +1315,7 @@ function drawStick(st, anchor, color) {
   ctx.beginPath(); ctx.arc(kx, ky, 20, 0, TAU); ctx.fill();
   ctx.restore();
 }
-function drawActBtn(b) {
+function drawActBtn(b, cdFrac = 0, cdText = '') {
   ctx.save();
   ctx.globalAlpha = 0.55;
   ctx.strokeStyle = b.color; ctx.lineWidth = 2;
@@ -1260,6 +1323,13 @@ function drawActBtn(b) {
   ctx.fillStyle = b.color; ctx.font = 'bold 14px ' + FONT;
   ctx.textAlign = 'center';
   ctx.fillText(b.label, b.x, b.y + 5);
+  if (cdFrac > 0) {
+    ctx.fillStyle = 'rgba(8,8,12,0.55)';
+    ctx.beginPath(); ctx.moveTo(b.x, b.y);
+    ctx.arc(b.x, b.y, b.r + 1, -Math.PI / 2, -Math.PI / 2 + (1 - cdFrac) * TAU);
+    ctx.closePath(); ctx.fill();
+    if (cdText) { ctx.fillStyle = '#fff'; ctx.font = 'bold 13px ' + FONT; ctx.fillText(cdText, b.x, b.y + 5); }
+  }
   ctx.restore();
 }
 function toggleFullscreen() {
@@ -1544,11 +1614,14 @@ function render() {
     }
     drawSprite(e.kind === 'shooter' ? 'enemy_shooter' : e.kind === 'rusher' ? 'enemy_rusher' : 'enemy_rusher',
                e.x, e.y, e.angle, e.r, '#ff5050', ba * dim, e.kind === 'boss' ? 1.9 : bs);
-    if (e.kind === 'heavy') {   // heavy 血条
-      ctx.fillStyle = 'rgba(22,22,26,0.25)';
-      ctx.fillRect(e.x - 26, e.y - e.r - 18, 52, 5);
-      ctx.fillStyle = '#c92a2a';
-      ctx.fillRect(e.x - 26, e.y - e.r - 18, 52 * (e.hp / 3), 5);
+    if (e.hpMax > 1 && e.hp < e.hpMax) {
+      const bw2 = e.kind === 'boss' ? 0 : e.r * 2;
+      if (bw2 > 0) {
+        ctx.fillStyle = 'rgba(255,255,255,0.22)';
+        ctx.fillRect(e.x - e.r, e.y - e.r - 11, bw2, 3);
+        ctx.fillStyle = '#ff5252';
+        ctx.fillRect(e.x - e.r, e.y - e.r - 11, bw2 * (e.hp / e.hpMax), 3);
+      }
     }
     if (e.hitFlash > 0) {
       ctx.globalAlpha = e.hitFlash * 5;
@@ -1572,7 +1645,7 @@ function render() {
     ctx.drawImage(GLOW_PLAYER(), player.x - pg / 2, player.y - pg / 2, pg, pg);
     ctx.restore();
     drawSprite('player', player.x, player.y, player.angle, player.r, '#dfe3ea');
-    if (player.shield) {
+    if (player.shield > 0) {
       ctx.strokeStyle = 'rgba(140,175,255,0.8)'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(player.x, player.y, player.r + 9 + Math.sin(playT * 4) * 1.5, 0, TAU); ctx.stroke();
     }
@@ -1613,6 +1686,24 @@ function render() {
       ctx.textAlign = 'center';
       ctx.fillText('换弹中', player.x, player.y + player.r + 28);
     }
+  }
+
+  /* 武器箱 */
+  for (const c2 of crates) {
+    if (c2.t > 7 && (performance.now() / 180 | 0) % 2 === 0) continue;
+    const col = c2.kind === 'shotgun' ? '#ffb45c' : '#d4e88f';
+    const bob2 = Math.sin(c2.t * 3) * 3;
+    ctx.save();
+    ctx.translate(c2.x, c2.y + bob2);
+    ctx.globalAlpha = 0.5;
+    ctx.drawImage(glowFor('w2' + c2.kind, c2.kind === 'shotgun' ? 'rgba(255,180,92,0.9)' : 'rgba(212,232,143,0.9)'), -30, -30, 60, 60);
+    ctx.restore();
+    ctx.fillStyle = '#191920';
+    roundRectPath(-18, -13, 36, 26, 4); ctx.fill();
+    ctx.strokeStyle = col; ctx.lineWidth = 1.5; ctx.stroke();
+    ctx.fillStyle = col; ctx.font = 'bold 10px ' + FONT;
+    ctx.textAlign = 'center';
+    ctx.fillText(c2.kind === 'shotgun' ? '霰' : '冲', 0, 4);
   }
 
   /* 迷雾团 */
@@ -1799,30 +1890,40 @@ function renderHUD() {
   ls('0px');
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 30px ' + FONT;
-  ctx.fillText('第 ' + wave + ' 波', 24, 66);
+  ctx.fillText('第 ' + wave + ' 波', 24, 62);
+  /* 生命 & 护盾 */
+  for (let i2 = 0; i2 < 3; i2++) {
+    ctx.fillStyle = i2 < player.hp ? '#ff5252' : 'rgba(255,255,255,0.16)';
+    roundRectPath(24 + i2 * 25, 74, 20, 13, 4); ctx.fill();
+  }
+  if (player.shield > 0)
+    for (let i2 = 0; i2 < player.shield; i2++) {
+      ctx.fillStyle = '#8fb0ff';
+      roundRectPath(104 + i2 * 19, 76, 14, 10, 3); ctx.fill();
+    }
   ctx.font = '13px ' + FONT;
   ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.fillText('击杀 ' + kills + '　·　擦弹 ' + grazes, 24, 90);
+  ctx.fillText('击杀 ' + kills + ' · 擦弹 ' + grazes, 24, 106);
   ls('1px');
   ctx.font = 'bold 14px ' + FONT;
   ctx.fillStyle = '#fff';
-  ctx.fillText('SCORE ' + score.toLocaleString(), 24, 113);
+  ctx.fillText('SCORE ' + score.toLocaleString(), 24, 130);
   ls('0px');
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.font = '12px ' + FONT;
-  ctx.fillText('场景 · ' + stageName, 24, 131);
+  ctx.fillText('场景 · ' + stageName, 24, 152);
 
   /* 连击徽章（带衰减条） */
   if (combo >= 2) {
     const cw = 118;
     ctx.strokeStyle = '#ff5252'; ctx.lineWidth = 1.5;
-    roundRectPath(24, 126, cw, 28, 3); ctx.stroke();
+    roundRectPath(24, 170, cw, 28, 3); ctx.stroke();
     ctx.fillStyle = '#ff5252';
     ctx.font = 'bold 15px ' + FONT;
     ctx.textAlign = 'center';
-    ctx.fillText('连击 ×' + combo, 24 + cw / 2, 145);
+    ctx.fillText('连击 ×' + combo, 24 + cw / 2, 189);
     ctx.fillStyle = 'rgba(255,82,82,0.85)';
-    ctx.fillRect(25, 126 + 28 - 4, (cw - 2) * clamp(comboT / 3, 0, 1), 3);
+    ctx.fillRect(25, 194, (cw - 2) * clamp(comboT / 3, 0, 1), 3);
     ctx.textAlign = 'left';
   }
 
@@ -1899,14 +2000,22 @@ function renderHUD() {
 
   /* 右下: 弹药（精修） */
   ctx.textAlign = 'right';
-  if (player.weapon === 'shotgun') {
+  if (player.wpn !== 'pistol') {
+    const wdef = WPN[player.wpn] || WPN.pistol;
+    const wcol = player.wpn === 'shotgun' ? '#ffb45c' : '#d4e88f';
     ls('2px');
     ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = EN;
-    ctx.fillText('SCATTER · Q 切换', W - 36, H - 66);
+    ctx.fillText(wdef.en + ' · Q 切换', W - 36, H - 66);
     ls('0px');
-    ctx.fillStyle = '#ffb45c'; ctx.font = 'bold 30px ' + FONT;
-    ctx.fillText(String(player.sg), W - 40, H - 44);
-    if (player.sg <= 0) player.weapon = 'pistol';
+    ctx.fillStyle = wcol; ctx.font = 'bold 30px ' + FONT;
+    ctx.fillText(String(player.wAmmo), W - 40, H - 44);
+    if (player.wTime > 0) {
+      ctx.fillStyle = 'rgba(255,255,255,0.15)';
+      ctx.fillRect(W - 146, H - 32, 110, 4);
+      ctx.fillStyle = wcol;
+      ctx.fillRect(W - 146, H - 32, 110 * clamp(player.wTime / player.wTimeMax, 0, 1), 4);
+    }
+    if (player.wAmmo <= 0 || player.wTime <= 0) switchWeapon('pistol');
   } else {
     ls('2px');
     ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = EN;
@@ -1934,8 +2043,29 @@ function renderHUD() {
     }
   }
 
+  /* 冲刺冷却 (桌面) */
+  if (!TOUCH && state === 'playing') {
+    panel(24, H - 78, 176, 50, { alpha: 0.04, r: 6 });
+    ls('2px');
+    ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = EN;
+    ctx.fillText('DASH · SPACE', 36, H - 60); ls('0px');
+    const df = clamp(1 - player.dashCd / 1.5, 0, 1);
+    ctx.fillStyle = 'rgba(255,255,255,0.15)';
+    ctx.fillRect(36, H - 50, 152, 5);
+    ctx.fillStyle = df >= 1 ? '#dfe8ff' : 'rgba(255,255,255,0.4)';
+    ctx.fillRect(36, H - 50, 152 * df, 5);
+    ctx.fillStyle = df >= 1 ? '#dfe8ff' : 'rgba(255,255,255,0.45)';
+    ctx.font = '11px ' + FONT;
+    ctx.fillText(df >= 1 ? '就绪' : player.dashCd.toFixed(1) + 's', 178, H - 45);
+  }
+
   /* 移动端: 动作键 */
-  if (TOUCH && state === 'playing') ACT_BTNS.forEach(b => drawActBtn(b));
+  if (TOUCH && state === 'playing') ACT_BTNS.forEach(b => {
+    let cf = 0, ct = '';
+    if (b.label === '冲刺' && player.dashCd > 0) { cf = clamp(player.dashCd / 1.5, 0, 1); ct = player.dashCd.toFixed(1); }
+    if (b.label === '换弹' && reloadT > 0) { cf = clamp(reloadT / 1.1, 0, 1); }
+    drawActBtn(b, cf, ct);
+  });
   /* 右上角: 全屏 / 暂停 */
   iconBtn(W - 44, 38, 17, toggleFullscreen, drawFsGlyph);
   if (TOUCH) iconBtn(W - 98, 38, 17, () => { paused = !paused; }, paused ? drawPlayGlyph : drawPauseGlyph);
