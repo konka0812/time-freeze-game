@@ -767,6 +767,8 @@ function update(dt) {
     mouse.down = !!bestE;
   }
   const ACC = 2600, MAXV = stageKey === 'lowg' ? 335 : 290;
+  player.dashCd = Math.max(0, player.dashCd - dt);
+  player.invulnT = Math.max(0, player.invulnT - dt);
   player.lastIx = ix; player.lastIy = iy;
   if ((keys.Space || keys.ShiftLeft) && player.dashCd <= 0) doDash();
   player.vx += ix * ACC * dt;
