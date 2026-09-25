@@ -2417,6 +2417,10 @@ function renderTitle() {
   ctx.fillStyle = 'rgba(255,255,255,0.22)';
   ctx.font = '12px ' + FONT;
   ctx.fillText('v5.2 · Q 切枪 · V 震动 · [ ] 音量 · M 静音 · ?demo 演示 · 素材 by gpt-image-2.5', 84, H - 26);
+  if (typeof window.__bootErr !== 'undefined') {
+    ctx.fillStyle = '#ff7b7b'; ctx.font = '12px ' + FONT;
+    ctx.fillText('启动异常: ' + window.__bootErr, 84, H - 10);
+  }
 
   iconBtn(W - 44, 38, 17, toggleFullscreen, drawFsGlyph);
   drawVignette();
