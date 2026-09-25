@@ -2012,6 +2012,13 @@ function render() {
     ctx.fillText('P 继续 · M 静音 · V 震动', W / 2, H / 2 + 6);
     drawButton(W / 2 - 100, H / 2 + 34, 200, 46, '继续游戏', 'RESUME · P', () => { paused = false; });
   }
+  if (window.__recUntil && performance.now() < window.__recUntil && Math.floor(performance.now() / 500) % 2 === 0) {
+    ctx.fillStyle = 'rgba(255,60,60,0.85)';
+    ctx.beginPath(); ctx.arc(W - 30, 34, 7, 0, TAU); ctx.fill();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 13px ' + FONT;
+    ctx.textAlign = 'left';
+    ctx.fillText('REC', W - 20, 39);
+  }
   if (state === 'dead') renderDead();
   if (TOUCH && state === 'playing') {
     drawStick(touchState.move, STICK_L, '#ffffff');
@@ -2596,3 +2603,29 @@ function loop(now) {
 }
 requestAnimationFrame(loop);
 if (DEMO) { try { startGame(); } catch (e8) { window.__bootErr = String(e8); state = 'title'; } }
+
+/* ?rec=秒数: 自动录制canvas为webm并下载 (配合demo=完整演示素材) */
+const REC_S = parseFloat(new URLSearchParams(location.search).get('rec') || '0');
+if (REC_S > 0) {
+  const recStart = () => {
+    try {
+      const stream = canvas.captureStream(30);
+      const mime = MediaRecorder.isTypeSupported('video/webm;codecs=vp9') ? 'video/webm;codecs=vp9' : 'video/webm';
+      const rec2 = new MediaRecorder(stream, { mimeType: mime, videoBitsPerSecond: 6000000 });
+      const chunks2 = [];
+      rec2.ondataavailable = e9 => { if (e9.data && e9.data.size) chunks2.push(e9.data); };
+      rec2.onstop = () => {
+        const blob = new Blob(chunks2, { type: 'video/webm' });
+        const a9 = document.createElement('a');
+        a9.href = URL.createObjectURL(blob);
+        a9.download = '时间静止-演示-' + REC_S + 's.webm';
+        document.body.appendChild(a9); a9.click(); a9.remove();
+        setTimeout(() => URL.revokeObjectURL(a9.href), 8000);
+      };
+      rec2.start();
+      window.__recUntil = performance.now() + REC_S * 1000;
+    } catch (e9) {}
+  };
+  if (document.readyState === 'complete') recStart();
+  else window.addEventListener('load', recStart);
+}
