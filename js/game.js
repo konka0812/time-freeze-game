@@ -319,6 +319,7 @@ const mouse = { x: W / 2, y: H / 2 - 200, down: false };
 addEventListener('keydown', e => {
   keys[e.code] = true;
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
+  if (e.code === 'Space' && state === 'playing' && !paused) doDash();
   if (e.code === 'KeyR' && state === 'dead') restart();
   if (e.code === 'KeyM') { muted = !muted; if (master) master.gain.value = muted ? 0 : settings.vol; try { localStorage.setItem('tf_muted', JSON.stringify(muted)); } catch (e4) {} }
   if (e.code === 'KeyV') { settings.shake = !settings.shake; saveSettings(); }
