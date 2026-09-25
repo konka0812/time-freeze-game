@@ -543,7 +543,7 @@ const STAGES = [
   { key: 'fog', cn: '迷雾', en: 'FOG' },
   { key: 'lowg', cn: '低重力', en: 'LOW-G' },
 ];
-let player, bullets, enemies, shards, telegraphs, flashes, floats, rings, dusts = [], stains = [], items = [], covers = [], hist = [], deathReplay = null, replayT = 0, moments = [], mines = [], supT = 0, focusT = 0, rains = [], pools = [], fogs = [], poolGrace = 0, stageKey = 'std', stageName = '标准 STANDARD', crates = [], crateT = 6, shots = 0, hitsN = 0, hitMarkT = 0, beams = [];
+let player, bullets, enemies, shards, telegraphs, flashes, floats, rings, dusts = [], stains = [], items = [], covers = [], hist = [], deathReplay = null, replayT = 0, moments = [], mines = [], supT = 0, focusT = 0, rains = [], pools = [], fogs = [], poolGrace = 0, stageKey = 'std', stageName = '标准 STANDARD', crates = [], crateT = 6, shots = 0, hitsN = 0, hitMarkT = 0, beams = [], crateBag = [];
 let best = { score: 0, wave: 0, kills: 0 };
 try { best = JSON.parse(localStorage.getItem('tf_best_v2')) || best; } catch (e) {}
 let top5 = [];
@@ -581,6 +581,7 @@ function waveComp(n) {
 
 function nextWave() {
   wave++;
+  if (wave > 1) { player.hp = player.hpMax; addFloat(player.x, player.y - 52, '生命回满', '#7bd88f', 16); }
   if (wave % 5 === 0) {
     const [bx0, by0] = spawnPoint();
     telegraphs.push({ x: bx0, y: by0, t: 1.8, dur: 1.8, kind: 'boss' });
@@ -789,7 +790,7 @@ function startGame() {
   for (let i = 0; i < 46; i++)
     dusts.push({ x: rand(ARENA.x, ARENA.x + ARENA.w), y: rand(ARENA.y, ARENA.y + ARENA.h),
       vx: rand(-9, 9), vy: rand(-7, 7), r: rand(0.8, 2.3), ph: rand(0, TAU) });
-  tickT = 0; hbT = 0; slowAllT = 0; slowmoT = 0; stains = []; items = []; mines = []; supT = 0; focusT = 0; shots = 0; hitsN = 0; hitMarkT = 0; beams = []; crates = []; crateT = 6; rains = []; pools = []; fogs = []; poolGrace = 0; stageKey = 'std'; stageName = '标准 STANDARD';
+  tickT = 0; hbT = 0; slowAllT = 0; slowmoT = 0; stains = []; items = []; mines = []; supT = 0; focusT = 0; shots = 0; hitsN = 0; hitMarkT = 0; beams = []; crates = []; crateT = 5; crateBag = ['rail', 'swarm'].sort(() => Math.random() - 0.5).concat(['shotgun', 'smg']); rains = []; pools = []; fogs = []; poolGrace = 0; stageKey = 'std'; stageName = '标准 STANDARD';
   covers = makeCovers(); hist = []; deathReplay = null; replayT = 0; moments = []; bgmStep = 0; bgmT = 0;
   const wq = new URLSearchParams(location.search).get('wpn');
   if (wq && WDATA[wq]) {
@@ -1049,7 +1050,9 @@ function update(dt) {
   crateT -= dt;
   if (crateT <= 0) {
     crateT = rand(13, 20);
-    const ck = ['shotgun', 'smg', 'shotgun', 'smg', 'rail', 'swarm'][Math.random() * 6 | 0];
+    if (crateBag.length === 0)
+      crateBag = ['shotgun', 'smg', 'rail', 'swarm'].sort(() => Math.random() - 0.5);
+    const ck = crateBag.pop();
     crates.push({ x: rand(ARENA.x + 120, ARENA.x + ARENA.w - 120), y: rand(ARENA.y + 120, ARENA.y + ARENA.h - 120), kind: ck, t: 0 });
   }
   for (let i = crates.length - 1; i >= 0; i--) {
