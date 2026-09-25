@@ -13,8 +13,8 @@ const TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 const STICK_L = { x: 150, y: H - 150 };
 const STICK_R = { x: W - 150, y: H - 150 };
 const ACT_BTNS = [
-  { x: 296, y: H - 96, r: 34, label: '冲刺', color: '#dfe8ff', action: () => doDash() },
-  { x: W - 296, y: H - 96, r: 34, label: '换弹', color: '#8fb0ff', action: () => tryReload() },
+  { x: W - 262, y: H - 228, r: 34, label: '冲刺', color: '#dfe8ff', action: () => doDash() },
+  { x: W - 262, y: H - 100, r: 34, label: '换弹', color: '#8fb0ff', action: () => tryReload() },
 ];
 const ARENA = { x: 40, y: 40, w: W - 80, h: H - 80 };
 const DPR = Math.min(2, window.devicePixelRatio || 1);
@@ -61,14 +61,30 @@ function rayCoverDist(x, y, a, max = 2000) {
   return max;
 }
 function makeCovers() {
-  const defs = [
-    { x: W / 2 - 340, y: H / 2 - 130, w: 116, h: 24 },
-    { x: W / 2 + 224, y: H / 2 + 106, w: 116, h: 24 },
-    { x: W / 2 - 70, y: H / 2 - 250, w: 24, h: 116 },
-    { x: W / 2 + 46, y: H / 2 + 144, w: 24, h: 116 },
+  const palettes = [
+    { f0: '#34343e', f1: '#1b1b21', rim: 'rgba(255,255,255,0.16)' },
+    { f0: '#3c2530', f1: '#231720', rim: 'rgba(224,49,49,0.4)' },
+    { f0: '#243044', f1: '#151d2a', rim: 'rgba(90,130,255,0.4)' },
   ];
-  return defs.map(d => ({ x: clamp(d.x + rand(-30, 30), ARENA.x + 30, ARENA.x + ARENA.w - d.w - 30),
-                          y: clamp(d.y + rand(-40, 40), ARENA.y + 30, ARENA.y + ARENA.h - d.h - 30), w: d.w, h: d.h }));
+  const pal = palettes[Math.random() * palettes.length | 0];
+  const out = [];
+  let guard = 0;
+  while (out.length < 4 + (Math.random() < 0.5 ? 1 : 0) && guard++ < 60) {
+    const horiz = Math.random() < 0.55;
+    const w2 = horiz ? rand(90, 150) : 24;
+    const h2 = horiz ? 24 : rand(90, 150);
+    const x = rand(ARENA.x + 90, ARENA.x + ARENA.w - w2 - 90);
+    const y = rand(ARENA.y + 80, ARENA.y + ARENA.h - h2 - 80);
+    if (Math.hypot(x + w2 / 2 - W / 2, y + h2 / 2 - H / 2) < 175) continue;
+    if (out.some(o => Math.abs(o.x - x) < (o.w + w2) / 2 + 55 && Math.abs(o.y - y) < (o.h + h2) / 2 + 55)) continue;
+    const cracks = [];
+    for (let i2 = 0; i2 < 4; i2++) {
+      const sx2 = rand(x + 6, x + w2 - 6), sy2 = rand(y + 6, y + h2 - 6);
+      cracks.push([sx2, sy2, sx2 + rand(-16, 16), sy2 + rand(-16, 16)]);
+    }
+    out.push({ x, y, w: w2, h: h2, hp: 8, pal, cracks });
+  }
+  return out;
 }
 
 /* ---------- UI 通用工具 ---------- */
@@ -283,6 +299,7 @@ const sfx = {
   dash()   { noiseHit(0.18, 'lowpass', 1400, 0.3, 150); },
   shieldHit() { tone('triangle', 1250, 320, 0.2, 0.3); noiseHit(0.1, 'highpass', 2200, 0.2); },
   pickup() { tone('triangle', 660, 990, 0.13, 0.2); },
+  pulse() { tone('sawtooth', 300, 50, 0.8, 0.2); noiseHit(0.6, 'lowpass', 400, 0.35, 80); },
   shotgun() { noiseHit(0.18, 'lowpass', 900, 0.6, 200); tone('sine', 95, 45, 0.16, 0.4); }
 };
 
@@ -438,7 +455,7 @@ let ammo = 8, MAG = 8, reloadT = 0;
 let waveBanner = 0, waveBannerText = '', quoteText = '', quoteT = 0;
 let demoT = 0, deadLine = '', tickT = 0, hbT = 0, slowAllT = 0, slowmoT = 0, whiteFlash = 0, bgmStep = 0, bgmT = 0;
 const BGM_PAT = [0, 3, 7, 10, 12, 10, 7, 3, 0, 3, 8, 7, 5, 3, 2, -2];
-let player, bullets, enemies, shards, telegraphs, flashes, floats, rings, dusts = [], stains = [], items = [], covers = [], hist = [], deathReplay = null, replayT = 0, moments = [];
+let player, bullets, enemies, shards, telegraphs, flashes, floats, rings, dusts = [], stains = [], items = [], covers = [], hist = [], deathReplay = null, replayT = 0, moments = [], mines = [], supT = 0, focusT = 0;
 let best = { score: 0, wave: 0, kills: 0 };
 try { best = JSON.parse(localStorage.getItem('tf_best_v2')) || best; } catch (e) {}
 let top5 = [];
@@ -467,6 +484,8 @@ function waveComp(n) {
     shooter: Math.min(7, 1 + Math.ceil(n * 0.45)),
     rusher:  Math.min(6, Math.floor(n * 0.55)),
     sniper:  n >= 3 ? Math.min(3, 1 + Math.floor((n - 3) / 3)) : 0,
+    miner:   n >= 6 && n % 2 === 0 ? 1 : 0,
+    echo:    n >= 7 ? Math.min(2, 1 + Math.floor((n - 7) / 4)) : 0,
     heavy:   n >= 4 ? Math.min(3, Math.floor((n - 1) / 3)) : 0,
   };
 }
@@ -491,7 +510,7 @@ function nextWave() {
     waveBanner = 2.4; waveBannerText = '第 ' + wave + ' 波';
   }
   if (wave >= 3 && wave % 3 === 0) {
-    const kind = ['shield', 'slow', 'shotgun'][(wave / 3 - 1) % 3];
+    const kind = ['slow', 'shotgun', 'slow'][(wave / 3 - 1) % 3];
     items.push({ x: rand(ARENA.x + 150, ARENA.x + ARENA.w - 270), y: rand(ARENA.y + 150, ARENA.y + ARENA.h - 270), kind, t: 0 });
   }
   quoteText = randQuote(); quoteT = 2.4;
@@ -503,11 +522,11 @@ function addFloat(x, y, text, color, size = 22) {
 }
 
 /* ---------- 实体 ---------- */
-function fireBullet(x, y, angle, speed, fromPlayer, tint, life) {
+function fireBullet(x, y, angle, speed, fromPlayer, tint, life, pierce) {
   bullets.push({
     x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
     r: 5.5, fromPlayer, trail: [], tint: tint || '#e9e9ee',
-    grazed: false, tw: rand(0, TAU), life: life === undefined ? Infinity : life,
+    grazed: false, tw: rand(0, TAU), life: life === undefined ? Infinity : life, pierce: pierce || 0,
   });
 }
 
@@ -552,10 +571,23 @@ function killPlayer() {
 function damagePlayer() {
   if (player.invulnT > 0) return;
   if (player.shield) {
-    player.shield = false; player.invulnT = 0.8;
+    player.shield = false; player.invulnT = 0.35;
     rings.push({ x: player.x, y: player.y, r: 22, v: 700, a: 0.65, c: '#8fb0ff' });
-    shatter(player.x, player.y, '#9fc0ff', 14, 0.9);
-    addFloat(player.x, player.y - 36, '护盾抵挡!', '#8fb0ff', 20);
+    rings.push({ x: player.x, y: player.y, r: 30, v: 1000, a: 0.5, c: '#cfe0ff' });
+    for (let i2 = bullets.length - 1; i2 >= 0; i2--) {
+      const b3 = bullets[i2];
+      if (!b3.fromPlayer && dist2(b3.x, b3.y, player.x, player.y) < 220 * 220) {
+        shatter(b3.x, b3.y, '#8fb0ff', 3, 0.4);
+        bullets.splice(i2, 1);
+      }
+    }
+    for (const en of enemies) {
+      const kx3 = en.x - player.x, ky3 = en.y - player.y;
+      const k3 = Math.hypot(kx3, ky3) || 1;
+      if (k3 < 170) { en.x += kx3 / k3 * (170 - k3) * 0.9; en.y += ky3 / k3 * (170 - k3) * 0.9; }
+    }
+    shatter(player.x, player.y, '#9fc0ff', 12, 0.8);
+    addFloat(player.x, player.y - 36, '护盾碎裂!', '#8fb0ff', 20);
     sfx.shieldHit();
     return;
   }
@@ -580,7 +612,7 @@ function killEnemyAt(idx) {
   rings.push({ x: e.x, y: e.y, r: 6, v: 640, a: 0.7, c: '#ffb3b3' });
   whiteFlash = Math.max(whiteFlash, 0.07);
   shatter(e.x, e.y, '#ffb3b3', 5, 0.45);
-  addScore(e.kind === 'boss' ? 2000 : e.kind === 'sniper' ? 150 : e.kind === 'rusher' ? 120 : e.kind === 'shooter' ? 100 : 300);
+  addScore(e.kind === 'boss' ? 2000 : e.kind === 'sniper' ? 150 : e.kind === 'echo' ? 250 : e.kind === 'miner' ? 200 : e.kind === 'rusher' ? 120 : e.kind === 'shooter' ? 100 : 300);
   if (e.kind === 'boss') {
     slowmoT = 1.2; shake = 30; whiteFlash = 0.15;
     quoteText = '守卫已破 · WARDEN DOWN'; quoteT = 2.6;
@@ -636,7 +668,7 @@ function startGame() {
   for (let i = 0; i < 46; i++)
     dusts.push({ x: rand(ARENA.x, ARENA.x + ARENA.w), y: rand(ARENA.y, ARENA.y + ARENA.h),
       vx: rand(-9, 9), vy: rand(-7, 7), r: rand(0.8, 2.3), ph: rand(0, TAU) });
-  tickT = 0; hbT = 0; slowAllT = 0; slowmoT = 0; stains = []; items = [];
+  tickT = 0; hbT = 0; slowAllT = 0; slowmoT = 0; stains = []; items = []; mines = []; supT = 0; focusT = 0;
   covers = makeCovers(); hist = []; deathReplay = null; replayT = 0; moments = []; bgmStep = 0; bgmT = 0;
   nextWave();
 }
@@ -748,7 +780,9 @@ function update(dt) {
       ammo--;
       player.fireCd = 0.15;
       timePulse = 0.5;
-      fireBullet(mx, my, player.angle + rand(-0.012, 0.012), 650, true);
+      let shotPierce = 0;
+      if (focusT >= 1.2) { shotPierce = 2; focusT = 0; addFloat(player.x, player.y - 40, '凝神·透', '#bff3ff', 20); tone('triangle', 880, 1320, 0.14, 0.18); }
+      fireBullet(mx, my, player.angle + rand(-0.012, 0.012), 650, true, undefined, undefined, shotPierce);
       flashes.push({ x: mx, y: my, a: player.angle, t: 0.07 });
       shake = Math.max(shake, 4);
       sfx.shoot();
@@ -769,12 +803,17 @@ function update(dt) {
   /* --- 时间系统 --- */
   const moveT = clamp(sp / 130, 0, 1);
   timePulse = Math.max(0, timePulse - dt * 1.55);
-  const target = Math.max(moveT, timePulse);
+  let target = Math.max(moveT, timePulse);
+  if (supT > 0) supT -= dt;
+  if (supT > 0) target = 1;
   const kk = target < timeSmooth ? 1 - Math.exp(-dt * 6.5) : 1 - Math.exp(-dt * 24);  // 冻结缓入像子弹时间
   timeSmooth += (target - timeSmooth) * kk;
   if (timeSmooth < 0.05 && !wasFrozen) { sfx.freeze(); rings.push({ x: player.x, y: player.y, r: 10, v: 900, a: 0.5, c: '#2258c7' }); }
   if (timeSmooth >= 0.5 && wasFrozen) { sfx.thaw(); rings.push({ x: player.x, y: player.y, r: 10, v: 900, a: 0.4, c: '#c92a2a' }); }
   wasFrozen = timeSmooth < 0.05;
+  /* 凝神: 静止蓄力, 解放穿透弹 */
+  if (timeSmooth < 0.06) focusT = Math.min(2.2, focusT + dt);
+  else focusT = Math.max(0, focusT - dt * 2.5);
   let wdt = dt * timeSmooth;
   if (slowAllT > 0) { slowAllT -= dt; wdt *= 0.5; }
   if (slowmoT > 0) { slowmoT -= dt; wdt *= 0.35; }
@@ -816,6 +855,26 @@ function update(dt) {
   }
   /* 血渍渐隐 */
   for (let i = stains.length - 1; i >= 0; i--) { stains[i].life -= wdt; if (stains[i].life <= 0) stains.splice(i, 1); }
+  /* 磐雷: 引信同样遵守时间冻结 */
+  for (let i = mines.length - 1; i >= 0; i--) {
+    const m2 = mines[i];
+    m2.life -= wdt;
+    if (m2.arm > 0) { m2.arm -= wdt; continue; }
+    const near = dist2(m2.x, m2.y, player.x, player.y) < 80 * 80
+      || enemies.some(en => en.birth <= 0 && dist2(m2.x, m2.y, en.x, en.y) < 70 * 70);
+    if (near || m2.life <= 0) {
+      mines.splice(i, 1);
+      rings.push({ x: m2.x, y: m2.y, r: 8, v: 900, a: 0.7, c: '#ff8c42' });
+      shatter(m2.x, m2.y, '#ff8c42', 14, 1);
+      shake = Math.max(shake, 8); whiteFlash = Math.max(whiteFlash, 0.06);
+      noiseHit(0.25, 'lowpass', 700, 0.5, 120);
+      if (dist2(m2.x, m2.y, player.x, player.y) < 95 * 95) damagePlayer();
+      for (const en of enemies)
+        if (en.birth <= 0 && dist2(m2.x, m2.y, en.x, en.y) < 110 * 110) { en.hp -= 2; en.hitFlash = 0.15; }
+      for (let j = enemies.length - 1; j >= 0; j--)
+        if (enemies[j].hp <= 0) killEnemyAt(j);
+    }
+  }
 
   /* --- 连击衰减 --- */
   if (combo > 0) { comboT -= wdt; if (comboT <= 0) combo = 0; }
@@ -832,8 +891,14 @@ function update(dt) {
         enemies.push({ kind: 'rusher', x: t.x, y: t.y, r: 20, hp: 1, angle: -Math.PI / 2, cd: rand(0.2, 0.6), dashT: 0, windT: 0, birth: 0.5 });
       else if (t.kind === 'sniper')
         enemies.push({ kind: 'sniper', x: t.x, y: t.y, r: 18, hp: 1, angle: -Math.PI / 2, cd: rand(1.0, 1.8), aimT: 0, locked: false, lockAngle: 0, strafe: Math.random() < 0.5 ? 1 : -1, birth: 0.5 });
+      else if (t.kind === 'miner')
+        enemies.push({ kind: 'miner', x: t.x, y: t.y, r: 20, hp: 2, angle: -Math.PI / 2, dir: Math.random() < 0.5 ? 1 : -1, dropT: 0.5, birth: 0.5 });
+      else if (t.kind === 'echo') {
+        const hs2 = hist.length ? hist[Math.max(0, hist.length - 70)] : null;
+        enemies.push({ kind: 'echo', x: hs2 ? hs2.p[0] : player.x, y: hs2 ? hs2.p[1] : player.y, r: 20, hp: 2, angle: -Math.PI / 2, prog: Math.max(0, hist.length - 70), fireT: rand(1.4, 2.2), birth: 0.7 });
+      }
       else if (t.kind === 'boss')
-        enemies.push({ kind: 'boss', x: t.x, y: t.y, r: 46, hp: 60, hpMax: 60, angle: -Math.PI / 2, cd: 2.2, spiralA: 0, spiralT: 0, spT: 0, fanT: 0, fanN: 0, fT: 0, atkN: 0, hitFlash: 0, birth: 0.9 });
+        enemies.push({ kind: 'boss', x: t.x, y: t.y, r: 46, hp: 150, hpMax: 150, angle: -Math.PI / 2, cd: 2.2, spiralA: 0, spiralT: 0, spT: 0, fanT: 0, fanN: 0, fT: 0, atkN: 0, hitFlash: 0, birth: 0.9, pulseCd: 7, pulseTele: 0 });
       else
         enemies.push({ kind: 'heavy', x: t.x, y: t.y, r: 30, hp: 3, angle: -Math.PI / 2, cd: rand(1.6, 2.4), hitFlash: 0, birth: 0.5 });
     }
@@ -905,6 +970,31 @@ function update(dt) {
           sfx.sniper();
         }
       }
+    } else if (e.kind === 'miner') {
+      e.x += e.dir * 82 * wdt;
+      e.dropT -= wdt;
+      if (e.dropT <= 0 && mines.length < 7) {
+        e.dropT = 0.9;
+        mines.push({ x: e.x, y: e.y + rand(-10, 10), arm: 0.6, life: 9, ph: rand(0, TAU) });
+      }
+      if (e.x < ARENA.x + 60 || e.x > ARENA.x + ARENA.w - 60) e.dir *= -1;
+    } else if (e.kind === 'echo') {
+      e.prog += wdt * 60;
+      const hi2 = Math.floor(e.prog);
+      if (hi2 < hist.length) {
+        e.x = hist[hi2].p[0]; e.y = hist[hi2].p[1]; e.angle = hist[hi2].p[2];
+      } else {
+        const ddx = player.x - e.x, ddy = player.y - e.y;
+        const ddd = Math.hypot(ddx, ddy) || 1;
+        e.x += ddx / ddd * 70 * wdt; e.y += ddy / ddd * 70 * wdt;
+        e.angle = Math.atan2(ddy, ddx);
+      }
+      e.fireT -= wdt;
+      if (e.fireT <= 0) {
+        e.fireT = rand(1.8, 2.6);
+        fireBullet(e.x + Math.cos(e.angle) * 26, e.y + Math.sin(e.angle) * 26, e.angle + rand(-0.15, 0.15), 400, false, '#9fb6ff');
+        sfx.eshoot();
+      }
     } else if (e.kind === 'boss') {
       const mv = (d > 430 ? 1 : 0) - (d < 300 ? 1 : 0);
       e.x += dx / d * mv * 46 * wdt;
@@ -912,6 +1002,21 @@ function update(dt) {
       e.x += -dy / d * 40 * Math.sin(playT * 0.7) * wdt;
       e.y += dx / d * 40 * Math.sin(playT * 0.7) * wdt;
       const phase = e.hp / e.hpMax > 0.66 ? 1 : e.hp / e.hpMax > 0.33 ? 2 : 3;
+      e.pulseCd = (e.pulseCd || 7) - wdt;
+      if (e.pulseTele > 0) {
+        e.pulseTele -= wdt;
+        if (e.pulseTele <= 0) {
+          supT = 2.6;
+          rings.push({ x: e.x, y: e.y, r: 20, v: 1100, a: 0.8, c: '#ff3b3b' });
+          whiteFlash = Math.max(whiteFlash, 0.1);
+          addFloat(W / 2, 150, '时锁冲击! SUPPRESSED', '#ff5252', 26);
+          sfx.pulse();
+        }
+      } else if (e.pulseCd <= 0) {
+        e.pulseCd = rand(8, 10);
+        e.pulseTele = 0.8;
+        tone('sawtooth', 320, 60, 0.7, 0.12);
+      }
       e.cd -= wdt;
       if (e.spiralT > 0) {
         e.spiralT -= wdt;
@@ -946,7 +1051,7 @@ function update(dt) {
     }
     e.x = clamp(e.x, ARENA.x + e.r, ARENA.x + ARENA.w - e.r);
     e.y = clamp(e.y, ARENA.y + e.r, ARENA.y + ARENA.h - e.r);
-    for (const rc of covers) { const pv = circleRectPush(e.x, e.y, e.r, rc); if (pv) { e.x = pv.px; e.y = pv.py; } }
+    if (e.kind !== 'echo') for (const rc of covers) { const pv = circleRectPush(e.x, e.y, e.r, rc); if (pv) { e.x = pv.px; e.y = pv.py; } }
   }
 
   /* --- 敌人互挤 --- */
@@ -969,7 +1074,18 @@ function update(dt) {
     if (b.trail.length > 14) b.trail.shift();
     b.x += b.vx * wdt; b.y += b.vy * wdt;
     if (b.life < Infinity) { b.life -= wdt; if (b.life <= 0) { shatter(b.x, b.y, b.tint, 3, 0.4); bullets.splice(i, 1); continue; } }
-    if (pointInCover(b.x, b.y)) { wallSparks(b.x, b.y); bullets.splice(i, 1); continue; }
+    const hitCv = pointInCover(b.x, b.y);
+    if (hitCv) {
+      hitCv.hp--;
+      wallSparks(b.x, b.y);
+      shatter(b.x, b.y, hitCv.pal.f0, 3, 0.5);
+      if (hitCv.hp <= 0) {
+        shatter(hitCv.x + hitCv.w / 2, hitCv.y + hitCv.h / 2, hitCv.pal.f0, 16, 1.1);
+        covers.splice(covers.indexOf(hitCv), 1);
+        shake = Math.max(shake, 6);
+      }
+      bullets.splice(i, 1); continue;
+    }
     if (b.x < ARENA.x || b.x > ARENA.x + ARENA.w || b.y < ARENA.y || b.y > ARENA.y + ARENA.h) {
       wallSparks(b.x, b.y); bullets.splice(i, 1); continue;
     }
@@ -978,12 +1094,14 @@ function update(dt) {
         const e = enemies[j];
         if (e.birth > 0) continue;
         if (dist2(b.x, b.y, e.x, e.y) < (b.r + e.r) * (b.r + e.r)) {
-          if (e.kind === 'heavy' && e.hp > 1) {
-            e.hp--; e.hitFlash = 0.12;
-            shatter(b.x, b.y, '#e03131', 6);
+          const dmg = b.pierce ? 2 : 1;
+          if ((e.kind === 'heavy' || e.kind === 'boss') && e.hp > dmg) {
+            e.hp -= dmg; e.hitFlash = 0.12;
+            shatter(b.x, b.y, '#e03131', 5, 0.5);
             sfx.heavyHit();
           } else killEnemyAt(j);
-          bullets.splice(i, 1); break;
+          if (b.pierce > 0) { b.pierce--; }
+          else { bullets.splice(i, 1); break; }
         }
       }
     } else {
@@ -1177,15 +1295,35 @@ function render() {
     ctx.beginPath(); ctx.arc(d.x, d.y, d.r, 0, TAU); ctx.fill();
   }
   ctx.globalAlpha = 1;
+  /* 磐雷 */
+  for (const m2 of mines) {
+    const armed = m2.arm <= 0;
+    const blinkOn = (Math.sin(playT * (armed ? 10 : 4) + m2.ph) + 1) / 2 > 0.4;
+    ctx.save();
+    ctx.translate(m2.x, m2.y);
+    ctx.fillStyle = '#2a1518';
+    ctx.beginPath(); ctx.arc(0, 0, 11, 0, TAU); ctx.fill();
+    ctx.strokeStyle = 'rgba(224,49,49,0.5)'; ctx.lineWidth = 1.5; ctx.stroke();
+    if (blinkOn) { ctx.fillStyle = armed ? '#ff5252' : '#8a3a3a'; ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, TAU); ctx.fill(); }
+    ctx.restore();
+  }
   /* 掩体 */
   for (const rc of covers) {
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
     ctx.fillRect(rc.x + 5, rc.y + 7, rc.w, rc.h);
     const cg = ctx.createLinearGradient(rc.x, rc.y, rc.x, rc.y + rc.h);
-    cg.addColorStop(0, '#34343e'); cg.addColorStop(1, '#1b1b21');
+    cg.addColorStop(0, rc.pal.f0); cg.addColorStop(1, rc.pal.f1);
     ctx.fillStyle = cg;
     roundRectPath(rc.x, rc.y, rc.w, rc.h, 5); ctx.fill();
-    ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 1.5; ctx.stroke();
+    if (rc.hp <= 6) {
+      ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1;
+      const n2 = 7 - rc.hp;
+      for (let i2 = 0; i2 < n2 && i2 < rc.cracks.length; i2++) {
+        const k2 = rc.cracks[i2];
+        ctx.beginPath(); ctx.moveTo(k2[0], k2[1]); ctx.lineTo(k2[2], k2[3]); ctx.stroke();
+      }
+    }
+    ctx.strokeStyle = rc.pal.rim; ctx.lineWidth = 1.5; ctx.stroke();
   }
   ctx.globalAlpha = 1;
   /* 击杀血渍 */
@@ -1244,7 +1382,7 @@ function render() {
       ctx.lineTo(b.trail[i][0], b.trail[i][1]);
       ctx.stroke();
     }
-    const gs = b.r * 8;
+    const gs = b.r * (b.pierce ? 11 : 8);
     ctx.globalAlpha = 0.9;
     ctx.drawImage(b.fromPlayer ? GLOW_WARM() : GLOW_ENEMY(), b.x - gs / 2, b.y - gs / 2, gs, gs);
     ctx.restore();
@@ -1290,6 +1428,24 @@ function render() {
       ctx.strokeStyle = 'rgba(224,49,49,' + (0.4 + 0.4 * Math.sin(playT * 30)) + ')';
       ctx.lineWidth = 4;
       ctx.beginPath(); ctx.arc(e.x, e.y, e.r + 10, 0, TAU); ctx.stroke();
+    }
+    if (e.kind === 'echo') {
+      const flick = 0.3 + 0.22 * Math.sin(playT * 22 + (e.prog || 0));
+      ctx.save();
+      ctx.globalCompositeOperation = 'lighter';
+      ctx.globalAlpha = flick;
+      ctx.drawImage(GLOW_PLAYER(), e.x - e.r * 2.6, e.y - e.r * 2.6, e.r * 5.2, e.r * 5.2);
+      ctx.restore();
+      drawSprite('player', e.x - 2.5, e.y, e.angle, e.r, '#8fb0ff', 0.4, 1);
+      drawSprite('player', e.x + 2.5, e.y, e.angle, e.r, '#ff8f8f', 0.4, 1);
+      drawSprite('player', e.x, e.y, e.angle, e.r, '#cfe0ff', 0.75, 1);
+      if (e.hitFlash > 0) {
+        ctx.globalAlpha = e.hitFlash * 4;
+        ctx.fillStyle = '#fff';
+        ctx.beginPath(); ctx.arc(e.x, e.y, e.r, 0, TAU); ctx.fill();
+        ctx.globalAlpha = 1;
+      }
+      continue;
     }
     const eg = e.kind === 'boss' ? e.r * 3.2 : e.r * 4.6;
     ctx.save();
@@ -1350,6 +1506,19 @@ function render() {
     if (player.shield) {
       ctx.strokeStyle = 'rgba(140,175,255,0.8)'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(player.x, player.y, player.r + 9 + Math.sin(playT * 4) * 1.5, 0, TAU); ctx.stroke();
+    }
+    if (focusT > 0.15) {
+      const fp = clamp(focusT / 2.2, 0, 1);
+      ctx.strokeStyle = focusT >= 1.2 ? 'rgba(191,243,255,0.9)' : 'rgba(120,160,255,0.55)';
+      ctx.lineWidth = 3;
+      ctx.beginPath();
+      ctx.arc(player.x, player.y, player.r + 15, -Math.PI / 2, -Math.PI / 2 + fp * TAU);
+      ctx.stroke();
+      if (focusT >= 1.2) {
+        ctx.fillStyle = '#bff3ff'; ctx.font = 'bold 12px ' + FONT;
+        ctx.textAlign = 'center';
+        ctx.fillText('凝神·透', player.x, player.y + player.r + 32);
+      }
     }
     if (combo >= 5) {
       const aur = 30 + Math.sin(playT * 5) * 3;
@@ -1479,6 +1648,10 @@ function render() {
     ctx.fillStyle = bv;
     ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
   }
+  if (supT > 0) {
+    ctx.fillStyle = 'rgba(224,49,49,0.08)';
+    ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
+  }
   ctx.restore();   // 相机变换结束
 
   /* 死亡红闪 */
@@ -1574,8 +1747,8 @@ function renderHUD() {
   const mw = 240, mx = W / 2 - mw / 2, my = 50;
   ctx.textAlign = 'center';
   ctx.font = 'bold 17px ' + FONT;
-  ctx.fillStyle = frozen ? '#8fb0ff' : '#ff5252';
-  ctx.fillText(frozen ? '■ 时间静止' : '▶ 时间流动', W / 2, 36);
+  ctx.fillStyle = supT > 0 ? '#ff3b3b' : frozen ? '#8fb0ff' : '#ff5252';
+  ctx.fillText(supT > 0 ? '⛔ 时锁压制' : frozen ? '■ 时间静止' : '▶ 时间流动', W / 2, 36);
   ctx.fillStyle = 'rgba(255,255,255,0.14)';
   roundRectPath(mx, my, mw, 4, 2); ctx.fill();
   ctx.fillStyle = frozen ? '#8fb0ff' : '#ff5252';
@@ -1787,39 +1960,41 @@ function renderDead() {
 const CODEX_CARDS = [
   { img: 'enemy_shooter', name: '枪手', en: 'GUNNER', threat: 1, desc: '保持中距横向游走，两发点射。', tip: '利用掩体拆火，优先点名。' },
   { img: 'enemy_rusher', name: '突进者', en: 'RUSHER', threat: 2, desc: '红圈蓄力 0.45 秒后直线扑刺，一发致命。', tip: '蓄力瞬间横移，让刺扑空。' },
-  { img: 'enemy_shooter', name: '狙击手', en: 'SNIPER', threat: 3, desc: '红色激光锁定 1.25 秒，光珠到头即射。', tip: '锁死瞬间脱离弹道，或躲进掩体。' },
-  { img: 'enemy_rusher', name: '重装兵', en: 'HEAVY', threat: 3, desc: '3 发血量，五连扇形弹幕，步步紧逼。', tip: '贴脸换血不亏，注意扇形走位。' },
+  { img: 'enemy_shooter', name: '狙击手', en: 'SNIPER', threat: 3, desc: '红色激光锁定 1.25 秒，光珠到头即射，掩体可挡。', tip: '锁死瞬间脱离弹道，或躲进掩体。' },
+  { img: 'enemy_rusher', name: '重装兵', en: 'HEAVY', threat: 3, desc: '3 发血量，五连扇形弹幕，步步紧逼。', tip: '凝神穿透弹两发带走。' },
+  { img: 'player', name: '回响者', en: 'ECHO', threat: 2, desc: '你 1.2 秒前的残影，重演你的走位并开枪。', tip: '打破习惯：别走老路，它就打不中。' },
+  { img: 'enemy_rusher', name: '布雷者', en: 'MINER', threat: 2, desc: '横穿战场布下磐雷，引信同样遵守时间冻结。', tip: '冻结时引信停摆，静止反能安全穿雷区。' },
 ];
 
 function renderCodex() {
   ctx.fillStyle = '#0d0d0f'; ctx.fillRect(0, 0, W, H);
   sectionHeader(84, 96, '敌人图鉴', 'CODEX · KNOW YOUR ENEMY');
   drawButton(W - 284, 74, 200, 52, '返回', 'BACK', () => { state = 'title'; });
-  const cw3 = 540, ch3 = 186, gx = 84, gy = 190, gapx = 22, gapy = 26;
+  const cw3 = 356, ch3 = 150, gx = 84, gy = 185, gapx = 22, gapy = 20;
   CODEX_CARDS.forEach((cd, i) => {
     const x = gx + (i % 2) * (cw3 + gapx), y = gy + Math.floor(i / 2) * (ch3 + gapy);
     panel(x, y, cw3, ch3);
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    roundRectPath(x + 18, y + 23, 140, 140, 6); ctx.fill();
+    roundRectPath(x + 14, y + 15, 120, 120, 6); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1; ctx.stroke();
     const im = IMG[cd.img];
-    if (im) ctx.drawImage(im, x + 28, y + 33, 120, 120);
+    if (im) ctx.drawImage(im, x + 19, y + 20, 110, 110);
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 24px ' + FONT;
-    ctx.fillText(cd.name, x + 182, y + 46);
-    ls('2px');
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 19px ' + FONT;
+    ctx.fillText(cd.name, x + 124, y + 34);
+    ls('1px');
     ctx.fillStyle = '#ff7b7b'; ctx.font = EN;
-    ctx.fillText(cd.en, x + 182, y + 66);
+    ctx.fillText(cd.en, x + 124, y + 50);
     ls('0px');
-    dots(x + 184, y + 84, cd.threat);
-    ctx.fillStyle = 'rgba(255,255,255,0.62)'; ctx.font = '15px ' + FONT;
-    ctx.fillText(cd.desc, x + 182, y + 118);
+    dots(x + 126, y + 66, cd.threat);
+    ctx.fillStyle = 'rgba(255,255,255,0.62)'; ctx.font = '12px ' + FONT;
+    ctx.fillText(cd.desc, x + 124, y + 94);
     ctx.strokeStyle = 'rgba(224,49,49,0.7)'; ctx.lineWidth = 1;
-    roundRectPath(x + 182, y + 134, 46, 20, 3); ctx.stroke();
-    ctx.fillStyle = '#ff7b7b'; ctx.font = 'bold 12px ' + FONT;
-    ctx.fillText('应对', x + 192, y + 148);
-    ctx.fillStyle = 'rgba(255,255,255,0.72)'; ctx.font = '14px ' + FONT;
-    ctx.fillText(cd.tip, x + 238, y + 148);
+    roundRectPath(x + 124, y + 106, 40, 18, 3); ctx.stroke();
+    ctx.fillStyle = '#ff7b7b'; ctx.font = 'bold 11px ' + FONT;
+    ctx.fillText('应对', x + 132, y + 119);
+    ctx.fillStyle = 'rgba(255,255,255,0.72)'; ctx.font = '12px ' + FONT;
+    ctx.fillText(cd.tip, x + 172, y + 119);
   });
   const byy = gy + ch3 * 2 + gapy + 12;
   panel(84, byy, W - 168, 62, { alpha: 0.06 });
@@ -1827,7 +2002,7 @@ function renderCodex() {
   ctx.fillStyle = '#ff7b7b'; ctx.font = 'bold 16px ' + FONT;
   ctx.fillText('BOSS · 红晶守卫', 112, byy + 26);
   ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = '14px ' + FONT;
-  ctx.fillText('每 5 波登场 · 60 HP · 螺旋弹幕 / 扇形连发 / 召唤援军 · 击破必掉双道具', 112, byy + 48);
+  ctx.fillText('每 5 波登场 · 150 HP · 螺旋弹幕 / 扇形连发 / 召唤援军 / 时锁冲击 · 击破必掉双道具', 112, byy + 48);
   drawVignette(); drawGrain(); drawCrosshair();
 }
 
