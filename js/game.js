@@ -319,10 +319,11 @@ const keys = {};
 const mouse = { x: W / 2, y: H / 2 - 200, down: false };
 addEventListener('keydown', e => {
   keys[e.code] = true;
+  initAudio();
   if (['Space','ArrowUp','ArrowDown','ArrowLeft','ArrowRight'].includes(e.code)) e.preventDefault();
   if (e.code === 'Space' && state === 'playing' && !paused) doDash();
   if (e.code === 'KeyR' && state === 'dead') restart();
-  if (e.code === 'KeyM') { muted = !muted; if (master) master.gain.value = muted ? 0 : settings.vol; try { localStorage.setItem('tf_muted', JSON.stringify(muted)); } catch (e4) {} }
+  if (e.code === 'KeyM') toggleMute();
   if (e.code === 'KeyV') { settings.shake = !settings.shake; saveSettings(); }
   if (e.code === 'BracketLeft' || e.code === 'BracketRight') {
     settings.vol = clamp(+(settings.vol + (e.code === 'BracketRight' ? 0.1 : -0.1)).toFixed(2), 0, 1);
@@ -453,6 +454,27 @@ function sectionHeader(x, y, cn, en) {
 }
 function vib(ms) {
   try { if (navigator.vibrate) navigator.vibrate(ms); } catch (e) {}
+}
+function toggleMute() {
+  muted = !muted;
+  if (master) master.gain.value = muted ? 0 : settings.vol;
+  try { localStorage.setItem('tf_muted', JSON.stringify(muted)); } catch (e4) {}
+}
+function drawSpeakerGlyph(x, y, isMuted) {
+  ctx.fillStyle = '#fff';
+  ctx.beginPath();
+  ctx.moveTo(x - 8, y - 3); ctx.lineTo(x - 4, y - 3); ctx.lineTo(x, y - 7); ctx.lineTo(x, y + 7); ctx.lineTo(x - 4, y + 3); ctx.lineTo(x - 8, y + 3);
+  ctx.closePath(); ctx.fill();
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.6; ctx.lineCap = 'round';
+  if (isMuted) {
+    ctx.beginPath();
+    ctx.moveTo(x + 3, y - 5); ctx.lineTo(x + 10, y + 5);
+    ctx.moveTo(x + 10, y - 5); ctx.lineTo(x + 3, y + 5);
+    ctx.stroke();
+  } else {
+    ctx.beginPath(); ctx.arc(x + 2, y, 4, -0.9, 0.9); ctx.stroke();
+    ctx.beginPath(); ctx.arc(x + 2, y, 7, -0.9, 0.9); ctx.stroke();
+  }
 }
 function dots(x, y, n, total = 3) {
   for (let i = 0; i < total; i++) {
@@ -2093,9 +2115,10 @@ function renderHUD() {
     if (b.label === '换弹' && reloadT > 0) { cf = clamp(reloadT / 1.1, 0, 1); }
     drawActBtn(b, cf, ct);
   });
-  /* 右上角: 全屏 / 暂停 */
+  /* 右上角: 音量 / 全屏 / 暂停 */
   iconBtn(W - 44, 38, 17, toggleFullscreen, drawFsGlyph);
   if (TOUCH) iconBtn(W - 98, 38, 17, () => { paused = !paused; }, paused ? drawPlayGlyph : drawPauseGlyph);
+  iconBtn(W - 152, 38, 17, () => toggleMute(), () => drawSpeakerGlyph(W - 152, 38, muted));
 
   /* 新手提示 */
   if (state === 'playing' && playT < 6) {
@@ -2427,6 +2450,7 @@ function renderTitle() {
   /* 开始按钮 */
   drawButton(84, 600, 218, 58, '开始游戏', 'START', () => { initAudio(); startGame(); });
   drawButton(318, 600, 218, 58, '敌人图鉴', 'CODEX', () => { state = 'codex'; });
+  iconBtn(W - 44, 38, 17, () => toggleMute(), () => drawSpeakerGlyph(W - 44, 38, muted));
 
   /* 页脚 */
   ctx.textAlign = 'left';
