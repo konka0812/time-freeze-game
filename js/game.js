@@ -2182,41 +2182,41 @@ const CODEX_CARDS = [
 
 function renderCodex() {
   ctx.fillStyle = '#0d0d0f'; ctx.fillRect(0, 0, W, H);
-  sectionHeader(84, 96, '敌人图鉴', 'CODEX · KNOW YOUR ENEMY');
-  drawButton(W - 284, 74, 200, 52, '返回', 'BACK', () => { state = 'title'; });
-  const cw3 = 356, ch3 = 150, gx = 84, gy = 185, gapx = 22, gapy = 20;
+  sectionHeader(84, 92, '敌人图鉴', 'CODEX · KNOW YOUR ENEMY');
+  drawButton(W - 284, 60, 200, 52, '返回', 'BACK', () => { state = 'title'; });
+  const cw3 = 540, ch3 = 140, gx = 84, gy = 170, gapx = 22, gapy = 18;
   CODEX_CARDS.forEach((cd, i) => {
     const x = gx + (i % 2) * (cw3 + gapx), y = gy + Math.floor(i / 2) * (ch3 + gapy);
     panel(x, y, cw3, ch3);
     ctx.fillStyle = 'rgba(0,0,0,0.35)';
-    roundRectPath(x + 14, y + 15, 120, 120, 6); ctx.fill();
+    roundRectPath(x + 12, y + 12, 116, 116, 6); ctx.fill();
     ctx.strokeStyle = 'rgba(255,255,255,0.10)'; ctx.lineWidth = 1; ctx.stroke();
     const im = IMG[cd.img];
-    if (im) ctx.drawImage(im, x + 19, y + 20, 110, 110);
+    if (im) ctx.drawImage(im, x + 17, y + 17, 106, 106);
     ctx.textAlign = 'left';
-    ctx.fillStyle = '#fff'; ctx.font = 'bold 19px ' + FONT;
-    ctx.fillText(cd.name, x + 124, y + 34);
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 18px ' + FONT;
+    ctx.fillText(cd.name, x + 140, y + 30);
     ls('1px');
     ctx.fillStyle = '#ff7b7b'; ctx.font = EN;
-    ctx.fillText(cd.en, x + 124, y + 50);
+    ctx.fillText(cd.en, x + 140, y + 47);
     ls('0px');
-    dots(x + 126, y + 66, cd.threat);
+    dots(x + 142, y + 62, cd.threat);
     ctx.fillStyle = 'rgba(255,255,255,0.62)'; ctx.font = '12px ' + FONT;
-    ctx.fillText(cd.desc, x + 124, y + 94);
+    ctx.fillText(cd.desc, x + 140, y + 88);
     ctx.strokeStyle = 'rgba(224,49,49,0.7)'; ctx.lineWidth = 1;
-    roundRectPath(x + 124, y + 106, 40, 18, 3); ctx.stroke();
+    roundRectPath(x + 140, y + 102, 40, 17, 3); ctx.stroke();
     ctx.fillStyle = '#ff7b7b'; ctx.font = 'bold 11px ' + FONT;
-    ctx.fillText('应对', x + 132, y + 119);
+    ctx.fillText('应对', x + 149, y + 114);
     ctx.fillStyle = 'rgba(255,255,255,0.72)'; ctx.font = '12px ' + FONT;
-    ctx.fillText(cd.tip, x + 172, y + 119);
+    ctx.fillText(cd.tip, x + 188, y + 115);
   });
-  const byy = gy + ch3 * 2 + gapy + 12;
-  panel(84, byy, W - 168, 62, { alpha: 0.06 });
-  ctx.fillStyle = '#e03131'; ctx.fillRect(84, byy, 4, 62);
+  const byy = 638;
+  panel(84, byy, W - 168, 54, { alpha: 0.06 });
+  ctx.fillStyle = '#e03131'; ctx.fillRect(84, byy, 4, 54);
   ctx.fillStyle = '#ff7b7b'; ctx.font = 'bold 16px ' + FONT;
-  ctx.fillText('BOSS · 红晶守卫', 112, byy + 26);
-  ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = '14px ' + FONT;
-  ctx.fillText('每 5 波登场 · 150 HP · 螺旋弹幕 / 扇形连发 / 召唤援军 / 时锁冲击 · 击破必掉双道具', 112, byy + 48);
+  ctx.fillText('BOSS · 红晶守卫', 112, byy + 23);
+  ctx.fillStyle = 'rgba(255,255,255,0.55)'; ctx.font = '13px ' + FONT;
+  ctx.fillText('每 5 波登场 · 150 HP · 螺旋弹幕 / 扇形连发 / 召唤援军 / 时锁冲击 · 击破必掉双道具', 112, byy + 42);
   drawVignette(); drawGrain(); drawCrosshair();
 }
 
