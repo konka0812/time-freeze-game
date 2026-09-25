@@ -455,7 +455,14 @@ let ammo = 8, MAG = 8, reloadT = 0;
 let waveBanner = 0, waveBannerText = '', quoteText = '', quoteT = 0;
 let demoT = 0, deadLine = '', tickT = 0, hbT = 0, slowAllT = 0, slowmoT = 0, whiteFlash = 0, bgmStep = 0, bgmT = 0;
 const BGM_PAT = [0, 3, 7, 10, 12, 10, 7, 3, 0, 3, 8, 7, 5, 3, 2, -2];
-let player, bullets, enemies, shards, telegraphs, flashes, floats, rings, dusts = [], stains = [], items = [], covers = [], hist = [], deathReplay = null, replayT = 0, moments = [], mines = [], supT = 0, focusT = 0;
+const STAGES = [
+  { key: 'std', cn: '标准', en: 'STANDARD' },
+  { key: 'storm', cn: '雷雨', en: 'STORM' },
+  { key: 'magma', cn: '熔池', en: 'MAGMA' },
+  { key: 'fog', cn: '迷雾', en: 'FOG' },
+  { key: 'lowg', cn: '低重力', en: 'LOW-G' },
+];
+let player, bullets, enemies, shards, telegraphs, flashes, floats, rings, dusts = [], stains = [], items = [], covers = [], hist = [], deathReplay = null, replayT = 0, moments = [], mines = [], supT = 0, focusT = 0, rains = [], pools = [], fogs = [], poolGrace = 0, stageKey = 'std', stageName = '标准 STANDARD';
 let best = { score: 0, wave: 0, kills: 0 };
 try { best = JSON.parse(localStorage.getItem('tf_best_v2')) || best; } catch (e) {}
 let top5 = [];
@@ -513,6 +520,16 @@ function nextWave() {
     const kind = ['slow', 'shotgun', 'slow'][(wave / 3 - 1) % 3];
     items.push({ x: rand(ARENA.x + 150, ARENA.x + ARENA.w - 270), y: rand(ARENA.y + 150, ARENA.y + ARENA.h - 270), kind, t: 0 });
   }
+  const stagePool = STAGES.filter(s2 => s2.key !== stageKey);
+  const stg = stagePool[Math.random() * stagePool.length | 0];
+  stageKey = stg.key; stageName = stg.cn + ' ' + stg.en;
+  if (stageKey === 'magma') {
+    pools = [];
+    for (let i2 = 0; i2 < 2; i2++) pools.push({ x: rand(ARENA.x + 180, ARENA.x + ARENA.w - 260), y: rand(ARENA.y + 160, ARENA.y + ARENA.h - 240), r: rand(70, 95) });
+  } else pools = [];
+  fogs = stageKey === 'fog' ? [0, 1, 2].map(() => ({ x: rand(ARENA.x + 120, ARENA.x + ARENA.w - 120), y: rand(ARENA.y + 100, ARENA.y + ARENA.h - 100), r: rand(115, 150), vx: rand(-9, 9), vy: rand(-7, 7) })) : [];
+  rains = stageKey === 'storm' ? rains : [];
+  waveBannerText += ' · ' + stg.cn;
   quoteText = randQuote(); quoteT = 2.4;
   sfx.wave(); sfx.quote();
 }
@@ -523,6 +540,8 @@ function addFloat(x, y, text, color, size = 22) {
 
 /* ---------- 实体 ---------- */
 function fireBullet(x, y, angle, speed, fromPlayer, tint, life, pierce) {
+  if (stageKey === 'lowg') speed *= 0.7;
+  else if (stageKey === 'storm') speed *= 1.12;
   bullets.push({
     x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
     r: 5.5, fromPlayer, trail: [], tint: tint || '#e9e9ee',
@@ -668,7 +687,7 @@ function startGame() {
   for (let i = 0; i < 46; i++)
     dusts.push({ x: rand(ARENA.x, ARENA.x + ARENA.w), y: rand(ARENA.y, ARENA.y + ARENA.h),
       vx: rand(-9, 9), vy: rand(-7, 7), r: rand(0.8, 2.3), ph: rand(0, TAU) });
-  tickT = 0; hbT = 0; slowAllT = 0; slowmoT = 0; stains = []; items = []; mines = []; supT = 0; focusT = 0;
+  tickT = 0; hbT = 0; slowAllT = 0; slowmoT = 0; stains = []; items = []; mines = []; supT = 0; focusT = 0; rains = []; pools = []; fogs = []; poolGrace = 0; stageKey = 'std'; stageName = '标准 STANDARD';
   covers = makeCovers(); hist = []; deathReplay = null; replayT = 0; moments = []; bgmStep = 0; bgmT = 0;
   nextWave();
 }
@@ -712,7 +731,7 @@ function update(dt) {
     if (bestE) { mouse.x = bestE.x; mouse.y = bestE.y; }
     mouse.down = !!bestE;
   }
-  const ACC = 2600, MAXV = 290;
+  const ACC = 2600, MAXV = stageKey === 'lowg' ? 335 : 290;
   player.lastIx = ix; player.lastIy = iy;
   if ((keys.Space || keys.ShiftLeft) && player.dashCd <= 0) doDash();
   player.vx += ix * ACC * dt;
@@ -730,6 +749,14 @@ function update(dt) {
   player.x = clamp(player.x + player.vx * dt, ARENA.x + player.r, ARENA.x + ARENA.w - player.r);
   player.y = clamp(player.y + player.vy * dt, ARENA.y + player.r, ARENA.y + ARENA.h - player.r);
   for (const rc of covers) { const pv = circleRectPush(player.x, player.y, player.r, rc); if (pv) { player.x = pv.px; player.y = pv.py; } }
+  if (stageKey === 'magma') {
+    poolGrace -= dt;
+    for (const p2 of pools)
+      if (dist2(player.x, player.y, p2.x, p2.y) < (p2.r * 0.8) ** 2) {
+        if (poolGrace <= 0 && player.invulnT <= 0) { damagePlayer(); poolGrace = 0.6; }
+        break;
+      }
+  }
   if (touchState.aim) {
     const adx = touchState.aim.x - touchState.aim.ox, ady = touchState.aim.y - touchState.aim.oy;
     const al = Math.hypot(adx, ady);
@@ -839,6 +866,16 @@ function update(dt) {
   }
   /* 漂浮灰尘: 随世界时间冻结 */
   for (const d of dusts) { d.x += d.vx * wdt; d.y += d.vy * wdt; }
+  /* 雨幕: 也随世界时间冻结 */
+  if (stageKey === 'storm') {
+    if (rains.length < 90) for (let i2 = 0; i2 < 3; i2++) rains.push({ x: rand(ARENA.x, ARENA.x + ARENA.w), y: ARENA.y - 10, v: rand(430, 560), drift: rand(-40, 40) });
+    for (let i2 = rains.length - 1; i2 >= 0; i2--) {
+      const r2 = rains[i2];
+      r2.y += r2.v * wdt; r2.x += r2.drift * wdt;
+      if (r2.y > ARENA.y + ARENA.h) rains.splice(i2, 1);
+    }
+  } else if (rains.length) rains.length = 0;
+  if (stageKey === 'fog') for (const f2 of fogs) { f2.x += f2.vx * dt; f2.y += f2.vy * dt; }
   /* 道具 */
   for (let i = items.length - 1; i >= 0; i--) {
     const it = items[i];
@@ -1052,7 +1089,14 @@ function update(dt) {
     e.x = clamp(e.x, ARENA.x + e.r, ARENA.x + ARENA.w - e.r);
     e.y = clamp(e.y, ARENA.y + e.r, ARENA.y + ARENA.h - e.r);
     if (e.kind !== 'echo') for (const rc of covers) { const pv = circleRectPush(e.x, e.y, e.r, rc); if (pv) { e.x = pv.px; e.y = pv.py; } }
+    if (stageKey === 'magma' && e.kind !== 'boss') {
+      for (const p3 of pools)
+        if (dist2(e.x, e.y, p3.x, p3.y) < (p3.r * 0.85) ** 2) { e.hp -= wdt * 3; e.hitFlash = Math.max(e.hitFlash || 0, 0.06); break; }
+    }
   }
+
+  for (let j = enemies.length - 1; j >= 0; j--)
+    if (enemies[j].hp <= 0 && enemies[j].birth <= 0) killEnemyAt(j);
 
   /* --- 敌人互挤 --- */
   for (let i = 0; i < enemies.length; i++)
@@ -1307,6 +1351,20 @@ function render() {
     if (blinkOn) { ctx.fillStyle = armed ? '#ff5252' : '#8a3a3a'; ctx.beginPath(); ctx.arc(0, 0, 4.5, 0, TAU); ctx.fill(); }
     ctx.restore();
   }
+  /* 熔池 */
+  if (stageKey === 'magma') {
+    for (const p3 of pools) {
+      const g3 = ctx.createRadialGradient(p3.x, p3.y, p3.r * 0.2, p3.x, p3.y, p3.r);
+      g3.addColorStop(0, 'rgba(255,120,50,0.55)');
+      g3.addColorStop(0.8, 'rgba(255,90,40,0.25)');
+      g3.addColorStop(1, 'rgba(255,90,40,0)');
+      ctx.fillStyle = g3;
+      ctx.beginPath(); ctx.arc(p3.x, p3.y, p3.r, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,140,66,' + (0.35 + 0.2 * Math.sin(playT * 3)).toFixed(3) + ')';
+      ctx.lineWidth = 2;
+      ctx.beginPath(); ctx.arc(p3.x, p3.y, p3.r * 0.92, 0, TAU); ctx.stroke();
+    }
+  }
   /* 掩体 */
   for (const rc of covers) {
     ctx.fillStyle = 'rgba(0,0,0,0.4)';
@@ -1400,6 +1458,16 @@ function render() {
     }
   }
 
+  /* 雨幕 */
+  if (stageKey === 'storm' && rains.length) {
+    ctx.save();
+    ctx.strokeStyle = 'rgba(170,200,255,0.30)'; ctx.lineWidth = 1.4;
+    ctx.beginPath();
+    for (const r2 of rains) { ctx.moveTo(r2.x, r2.y); ctx.lineTo(r2.x - r2.drift * 0.03, r2.y - 13); }
+    ctx.stroke();
+    ctx.restore();
+  }
+
   /* 狙击手激光 */
   for (const e of enemies) {
     if (e.kind !== 'sniper' || e.aimT <= 0 || e.birth > 0) continue;
@@ -1447,10 +1515,11 @@ function render() {
       }
       continue;
     }
-    const eg = e.kind === 'boss' ? e.r * 3.2 : e.r * 4.6;
+    const dim = stageKey === 'fog' && fogs.some(f2 => dist2(e.x, e.y, f2.x, f2.y) < f2.r * f2.r) ? 0.16 : 1;
+    const eg = dim < 1 ? e.r * 4.6 * dim : e.r * 4.6;
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
-    ctx.globalAlpha = 0.5;
+    ctx.globalAlpha = 0.5 * dim;
     ctx.drawImage(GLOW_ENEMY(), e.x - eg / 2, e.y - eg / 2, eg, eg);
     ctx.restore();
     const bs = e.birth > 0 ? 1 - (e.birth / 0.5) * 0.7 : 1;
@@ -1474,7 +1543,7 @@ function render() {
       ctx.restore();
     }
     drawSprite(e.kind === 'shooter' ? 'enemy_shooter' : e.kind === 'rusher' ? 'enemy_rusher' : 'enemy_rusher',
-               e.x, e.y, e.angle, e.r, '#ff5050', ba, e.kind === 'boss' ? 1.9 : bs);
+               e.x, e.y, e.angle, e.r, '#ff5050', ba * dim, e.kind === 'boss' ? 1.9 : bs);
     if (e.kind === 'heavy') {   // heavy 血条
       ctx.fillStyle = 'rgba(22,22,26,0.25)';
       ctx.fillRect(e.x - 26, e.y - e.r - 18, 52, 5);
@@ -1543,6 +1612,17 @@ function render() {
       ctx.font = 'bold 13px ' + FONT;
       ctx.textAlign = 'center';
       ctx.fillText('换弹中', player.x, player.y + player.r + 28);
+    }
+  }
+
+  /* 迷雾团 */
+  if (stageKey === 'fog') {
+    for (const f2 of fogs) {
+      const g4 = ctx.createRadialGradient(f2.x, f2.y, f2.r * 0.2, f2.x, f2.y, f2.r);
+      g4.addColorStop(0, 'rgba(210,220,235,0.14)');
+      g4.addColorStop(1, 'rgba(210,220,235,0)');
+      ctx.fillStyle = g4;
+      ctx.beginPath(); ctx.arc(f2.x, f2.y, f2.r, 0, TAU); ctx.fill();
     }
   }
 
@@ -1728,6 +1808,9 @@ function renderHUD() {
   ctx.fillStyle = '#fff';
   ctx.fillText('SCORE ' + score.toLocaleString(), 24, 113);
   ls('0px');
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.font = '12px ' + FONT;
+  ctx.fillText('场景 · ' + stageName, 24, 131);
 
   /* 连击徽章（带衰减条） */
   if (combo >= 2) {
