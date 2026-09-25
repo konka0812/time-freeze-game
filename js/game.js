@@ -9,6 +9,13 @@ const ctx = canvas.getContext('2d');
 const W = 1280, H = 720;
 const DEMO = new URLSearchParams(location.search).has('demo');   // ?demo 自动演示
 const BOSS_START = new URLSearchParams(location.search).has('boss');  // ?boss 直达BOSS战
+const TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
+const STICK_L = { x: 150, y: H - 150 };
+const STICK_R = { x: W - 150, y: H - 150 };
+const ACT_BTNS = [
+  { x: 296, y: H - 96, r: 34, label: '冲刺', color: '#dfe8ff', action: () => doDash() },
+  { x: W - 296, y: H - 96, r: 34, label: '换弹', color: '#8fb0ff', action: () => tryReload() },
+];
 const ARENA = { x: 40, y: 40, w: W - 80, h: H - 80 };
 const DPR = Math.min(2, window.devicePixelRatio || 1);
 canvas.width = W * DPR; canvas.height = H * DPR;
@@ -327,6 +334,13 @@ canvas.addEventListener('touchstart', e => {
   if (state === 'dead') { restart(); return; }
   for (const t of e.changedTouches) {
     const p = touchXY(t);
+    let hitUI = false;
+    for (const b of uiButtons)
+      if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { b.action(); hitUI = true; break; }
+    if (hitUI) continue;
+    for (const b of ACT_BTNS)
+      if (Math.hypot(p.x - b.x, p.y - b.y) <= b.r + 8) { b.action(); hitUI = true; break; }
+    if (hitUI) continue;
     if (p.x < W / 2 && !touchState.move) touchState.move = { id: t.identifier, ox: p.x, oy: p.y, x: p.x, y: p.y };
     else if (!touchState.aim) touchState.aim = { id: t.identifier, ox: p.x, oy: p.y, x: p.x, y: p.y };
   }
@@ -344,6 +358,38 @@ for (const ev of ['touchend', 'touchcancel']) canvas.addEventListener(ev, e => {
     for (const k of ['move', 'aim'])
       if (touchState[k] && touchState[k].id === t.identifier) { touchState[k] = null; if (k === 'aim') mouse.down = false; }
 });
+
+function iconBtn(x, y, r, action, drawFn) {
+  const hov = Math.hypot(mouse.x - x, mouse.y - y) <= r + 2;
+  uiButtons.push({ x: x - r - 4, y: y - r - 4, w: (r + 4) * 2, h: (r + 4) * 2, action });
+  ctx.save();
+  ctx.globalAlpha = hov ? 0.95 : 0.55;
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 1.5;
+  ctx.beginPath(); ctx.arc(x, y, r, 0, TAU); ctx.stroke();
+  drawFn(x, y);
+  ctx.restore();
+}
+function drawFsGlyph(x, y) {
+  const s = 5, g = 3;
+  ctx.strokeStyle = '#fff'; ctx.lineWidth = 2;
+  [[-1, -1], [1, -1], [1, 1], [-1, 1]].forEach(([sx, sy]) => {
+    ctx.beginPath();
+    ctx.moveTo(x + sx * (s + g), y + sy * (s + g) - sy * s);
+    ctx.lineTo(x + sx * (s + g), y + sy * (s + g));
+    ctx.lineTo(x + sx * (s + g) - sx * s, y + sy * (s + g));
+    ctx.stroke();
+  });
+}
+function drawPauseGlyph(x, y) {
+  ctx.fillStyle = '#fff';
+  ctx.fillRect(x - 5, y - 6, 3.5, 12);
+  ctx.fillRect(x + 2, y - 6, 3.5, 12);
+}
+function drawPlayGlyph(x, y) {
+  ctx.fillStyle = '#fff';
+  ctx.beginPath(); ctx.moveTo(x - 4, y - 7); ctx.lineTo(x + 7, y); ctx.lineTo(x - 4, y + 7);
+  ctx.closePath(); ctx.fill();
+}
 
 /* ---------- UI 设计系统 ---------- */
 function panel(x, y, w, h, opt = {}) {
@@ -555,6 +601,20 @@ function killEnemyAt(idx) {
   enemies.splice(idx, 1);
 }
 
+function doDash() {
+  if (state !== 'playing' || paused || player.dashCd > 0) return;
+  const dl = Math.hypot(player.lastIx || 0, player.lastIy || 0);
+  const dxn = dl > 0.01 ? player.lastIx / dl : Math.cos(player.angle);
+  const dyn = dl > 0.01 ? player.lastIy / dl : Math.sin(player.angle);
+  player.vx = dxn * 950; player.vy = dyn * 950;
+  player.dashT = 0.15; player.dashCd = 1.5;
+  player.invulnT = Math.max(player.invulnT, 0.24);
+  timePulse = Math.max(timePulse, 0.5);
+  shake = Math.max(shake, 3);
+  sfx.dash();
+  rings.push({ x: player.x, y: player.y, r: 8, v: 820, a: 0.5, c: '#dfe8ff' });
+}
+
 function tryReload() {
   if (reloadT > 0 || ammo === MAG) return;
   reloadT = 1.1;
@@ -599,6 +659,12 @@ function update(dt) {
     if (ml > 6) { const mg = Math.min(1, ml / 44); ix = mdx / ml * mg; iy = mdy / ml * mg; }
     else { ix = 0; iy = 0; }
   }
+  if (touchState.move) {
+    const mdx = touchState.move.x - touchState.move.ox, mdy = touchState.move.y - touchState.move.oy;
+    const ml = Math.hypot(mdx, mdy);
+    if (ml > 6) { const mg = Math.min(1, ml / 44); ix = mdx / ml * mg; iy = mdy / ml * mg; }
+    else { ix = 0; iy = 0; }
+  }
   if (DEMO) {
     demoT += dt;
     ix = Math.cos(demoT * 2.3) + Math.cos(demoT * 0.9) * 0.6;
@@ -615,20 +681,8 @@ function update(dt) {
     mouse.down = !!bestE;
   }
   const ACC = 2600, MAXV = 290;
-  player.dashCd = Math.max(0, player.dashCd - dt);
-  player.invulnT = Math.max(0, player.invulnT - dt);
-  if ((keys.Space || keys.ShiftLeft) && player.dashCd <= 0) {
-    const dl = Math.hypot(ix, iy);
-    const dxn = dl > 0.01 ? ix / dl : Math.cos(player.angle);
-    const dyn = dl > 0.01 ? iy / dl : Math.sin(player.angle);
-    player.vx = dxn * 950; player.vy = dyn * 950;
-    player.dashT = 0.15; player.dashCd = 1.5;
-    player.invulnT = Math.max(player.invulnT, 0.24);
-    timePulse = Math.max(timePulse, 0.5);
-    shake = Math.max(shake, 3);
-    sfx.dash();
-    rings.push({ x: player.x, y: player.y, r: 8, v: 820, a: 0.5, c: '#dfe8ff' });
-  }
+  player.lastIx = ix; player.lastIy = iy;
+  if ((keys.Space || keys.ShiftLeft) && player.dashCd <= 0) doDash();
   player.vx += ix * ACC * dt;
   player.vy += iy * ACC * dt;
   if (player.dashT > 0) {
@@ -644,6 +698,12 @@ function update(dt) {
   player.x = clamp(player.x + player.vx * dt, ARENA.x + player.r, ARENA.x + ARENA.w - player.r);
   player.y = clamp(player.y + player.vy * dt, ARENA.y + player.r, ARENA.y + ARENA.h - player.r);
   for (const rc of covers) { const pv = circleRectPush(player.x, player.y, player.r, rc); if (pv) { player.x = pv.px; player.y = pv.py; } }
+  if (touchState.aim) {
+    const adx = touchState.aim.x - touchState.aim.ox, ady = touchState.aim.y - touchState.aim.oy;
+    const al = Math.hypot(adx, ady);
+    if (al > 12) { mouse.x = player.x + adx / al * 140; mouse.y = player.y + ady / al * 140; mouse.down = true; }
+    else mouse.down = false;
+  }
   if (touchState.aim) {
     const adx = touchState.aim.x - touchState.aim.ox, ady = touchState.aim.y - touchState.aim.oy;
     const al = Math.hypot(adx, ady);
@@ -1011,6 +1071,47 @@ function deathUpdate(dt) {
   redFlash = Math.max(0, redFlash - dt * 0.8);
   whiteFlash = Math.max(0, whiteFlash - dt * 2.4);
   shake = Math.max(0, shake - dt * 26);
+}
+
+function drawStick(st, anchor, color) {
+  const bx = st ? st.ox : anchor.x, by = st ? st.oy : anchor.y;
+  ctx.save();
+  ctx.globalAlpha = st ? 0.45 : 0.18;
+  ctx.strokeStyle = color; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(bx, by, 62, 0, TAU); ctx.stroke();
+  let kx = bx, ky = by;
+  if (st) {
+    const dx3 = st.x - st.ox, dy3 = st.y - st.oy;
+    const l4 = Math.min(Math.hypot(dx3, dy3), 42);
+    const a4 = Math.atan2(dy3, dx3);
+    kx = bx + Math.cos(a4) * l4; ky = by + Math.sin(a4) * l4;
+  }
+  ctx.fillStyle = color; ctx.globalAlpha = st ? 0.5 : 0.16;
+  ctx.beginPath(); ctx.arc(kx, ky, 20, 0, TAU); ctx.fill();
+  ctx.restore();
+}
+function drawActBtn(b) {
+  ctx.save();
+  ctx.globalAlpha = 0.55;
+  ctx.strokeStyle = b.color; ctx.lineWidth = 2;
+  ctx.beginPath(); ctx.arc(b.x, b.y, b.r, 0, TAU); ctx.stroke();
+  ctx.fillStyle = b.color; ctx.font = 'bold 14px ' + FONT;
+  ctx.textAlign = 'center';
+  ctx.fillText(b.label, b.x, b.y + 5);
+  ctx.restore();
+}
+function toggleFullscreen() {
+  try {
+    const d = document.documentElement;
+    const el = document.fullscreenElement || document.webkitFullscreenElement;
+    if (!el) {
+      const p = d.requestFullscreen ? d.requestFullscreen() : (d.webkitRequestFullscreen ? d.webkitRequestFullscreen() : null);
+      if (p && p.then) p.then(() => { try { screen.orientation.lock('landscape').catch(() => {}); } catch (e6) {} }).catch(() => {});
+    } else {
+      if (document.exitFullscreen) document.exitFullscreen();
+      else if (document.webkitExitFullscreen) document.webkitExitFullscreen();
+    }
+  } catch (e6) {}
 }
 
 /* ---------- 渲染 ---------- */
@@ -1406,8 +1507,20 @@ function render() {
     drawButton(W / 2 - 100, H / 2 + 34, 200, 46, '继续游戏', 'RESUME · P', () => { paused = false; });
   }
   if (state === 'dead') renderDead();
+  if (TOUCH && state === 'playing') {
+    drawStick(touchState.move, STICK_L, '#ffffff');
+    drawStick(touchState.aim, STICK_R, '#ff5252');
+  }
   drawGrain();
   drawCrosshair();
+  if (TOUCH && innerHeight > innerWidth && state !== 'loading') {
+    ctx.fillStyle = 'rgba(8,8,10,0.9)'; ctx.fillRect(0, 0, W, H);
+    ctx.textAlign = 'center';
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 40px ' + FONT;
+    ctx.fillText('请横屏游玩', W / 2, H / 2 - 20);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = '18px ' + FONT;
+    ctx.fillText('旋转手机获得最佳视野', W / 2, H / 2 + 26);
+  }
 }
 
 function renderHUD() {
@@ -1564,12 +1677,18 @@ function renderHUD() {
     }
   }
 
+  /* 移动端: 动作键 */
+  if (TOUCH && state === 'playing') ACT_BTNS.forEach(b => drawActBtn(b));
+  /* 右上角: 全屏 / 暂停 */
+  iconBtn(W - 44, 38, 17, toggleFullscreen, drawFsGlyph);
+  if (TOUCH) iconBtn(W - 98, 38, 17, () => { paused = !paused; }, paused ? drawPlayGlyph : drawPauseGlyph);
+
   /* 新手提示 */
   if (state === 'playing' && playT < 6) {
     ctx.textAlign = 'center';
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.font = 'bold 18px ' + FONT;
-    ctx.fillText('WASD 移动 · 空格冲刺 · 左键开枪 —— 你不动，世界就不动', W / 2, H - 24);
+    ctx.fillText(TOUCH ? '左半屏拖动移动 · 右半屏拖动瞄准开火 —— 你不动，世界就不动' : 'WASD 移动 · 空格冲刺 · 左键开枪 —— 你不动，世界就不动', W / 2, 140);
   }
 }
 
@@ -1899,6 +2018,7 @@ function renderTitle() {
   ctx.font = '12px ' + FONT;
   ctx.fillText('v5.0 · Q 切枪 · V 震动 · [ ] 音量 · M 静音 · ?demo 演示 · 素材 by gpt-image-2.5', 84, H - 26);
 
+  iconBtn(W - 44, 38, 17, toggleFullscreen, drawFsGlyph);
   drawVignette();
   drawGrain();
   drawCrosshair();
