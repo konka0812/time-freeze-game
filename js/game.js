@@ -524,6 +524,7 @@ let lastRun = null, lastDiff = null;
 try { lastRun = JSON.parse(localStorage.getItem('tf_last') || 'null'); } catch (e) {}
 let settings = { vol: 0.5, shake: true };
 try { Object.assign(settings, JSON.parse(localStorage.getItem('tf_settings') || '{}')); } catch (e) {}
+if (!(settings.vol > 0.15)) settings.vol = 0.5;
 function saveSettings() { try { localStorage.setItem('tf_settings', JSON.stringify(settings)); } catch (e) {} }
 
 /* ---------- 生成/台词 ---------- */
