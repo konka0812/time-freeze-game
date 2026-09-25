@@ -6,3 +6,7 @@ patch_*.py
 assets_gen4_*.py
 素材/
 *.mp4
+grab_frame.py
+make_script.py
+record_game.py
+transcode.py
