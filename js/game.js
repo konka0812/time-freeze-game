@@ -12,6 +12,10 @@ const BOSS_START = new URLSearchParams(location.search).has('boss');  // ?boss �
 const TOUCH = ('ontouchstart' in window) || navigator.maxTouchPoints > 0;
 const STICK_L = { x: 150, y: H - 150 };
 const STICK_R = { x: W - 150, y: H - 150 };
+const KIND_IMG = {
+  shooter: 'enemy_shooter', rusher: 'enemy_rusher', sniper: 'enemy_sniper',
+  heavy: 'enemy_heavy', echo: 'enemy_echo', miner: 'enemy_miner', boss: 'enemy_heavy',
+};
 const ACT_BTNS = [
   { x: W - 262, y: H - 228, r: 34, label: '冲刺', color: '#dfe8ff', action: () => doDash() },
   { x: W - 262, y: H - 100, r: 34, label: '换弹', color: '#8fb0ff', action: () => tryReload() },
@@ -216,6 +220,10 @@ Promise.all([
   loadImg('player', 'assets/player.png'),
   loadImg('enemy_shooter', 'assets/enemy_shooter.png'),
   loadImg('enemy_rusher', 'assets/enemy_rusher.png'),
+  loadImg('enemy_sniper', 'assets/enemy_sniper.png'),
+  loadImg('enemy_heavy', 'assets/enemy_heavy.png'),
+  loadImg('enemy_echo', 'assets/enemy_echo.png'),
+  loadImg('enemy_miner', 'assets/enemy_miner.png'),
   loadImg('floor', 'assets/floor.png'),
   loadImg('cover', 'assets/cover.png'),
 ]).then(() => {
@@ -1574,9 +1582,9 @@ function render() {
       ctx.globalAlpha = flick;
       ctx.drawImage(GLOW_PLAYER(), e.x - e.r * 2.6, e.y - e.r * 2.6, e.r * 5.2, e.r * 5.2);
       ctx.restore();
-      drawSprite('player', e.x - 2.5, e.y, e.angle, e.r, '#8fb0ff', 0.4, 1);
-      drawSprite('player', e.x + 2.5, e.y, e.angle, e.r, '#ff8f8f', 0.4, 1);
-      drawSprite('player', e.x, e.y, e.angle, e.r, '#cfe0ff', 0.75, 1);
+      drawSprite('enemy_echo', e.x - 2.5, e.y, e.angle, e.r, '#8fb0ff', 0.4, 1);
+      drawSprite('enemy_echo', e.x + 2.5, e.y, e.angle, e.r, '#ff8f8f', 0.4, 1);
+      drawSprite('enemy_echo', e.x, e.y, e.angle, e.r, '#cfe0ff', 0.75, 1);
       if (e.hitFlash > 0) {
         ctx.globalAlpha = e.hitFlash * 4;
         ctx.fillStyle = '#fff';
@@ -1612,7 +1620,7 @@ function render() {
       for (let i3 = 0; i3 < 3; i3++) { ctx.beginPath(); ctx.arc(0, 0, e.r + 16, i3 * TAU / 3, i3 * TAU / 3 + 1.5); ctx.stroke(); }
       ctx.restore();
     }
-    drawSprite(e.kind === 'shooter' ? 'enemy_shooter' : e.kind === 'rusher' ? 'enemy_rusher' : 'enemy_rusher',
+    drawSprite(KIND_IMG[e.kind] || 'enemy_rusher',
                e.x, e.y, e.angle, e.r, '#ff5050', ba * dim, e.kind === 'boss' ? 1.9 : bs);
     if (e.hpMax > 1 && e.hp < e.hpMax) {
       const bw2 = e.kind === 'boss' ? 0 : e.r * 2;
@@ -1933,7 +1941,7 @@ function renderHUD() {
   ctx.textAlign = 'center';
   ctx.font = 'bold 17px ' + FONT;
   ctx.fillStyle = supT > 0 ? '#ff3b3b' : frozen ? '#8fb0ff' : '#ff5252';
-  ctx.fillText(supT > 0 ? '⛔ 时锁压制' : frozen ? '■ 时间静止' : '▶ 时间流动', W / 2, 36);
+  ctx.fillText(supT > 0 ? '!! 时锁压制' : frozen ? '■ 时间静止' : '▶ 时间流动', W / 2, 36);
   ctx.fillStyle = 'rgba(255,255,255,0.14)';
   roundRectPath(mx, my, mw, 4, 2); ctx.fill();
   ctx.fillStyle = frozen ? '#8fb0ff' : '#ff5252';
@@ -2114,7 +2122,7 @@ function renderDead() {
     roundRectPath(W / 2 - 92, H / 2 - 26, 184, 30, 3); ctx.stroke();
     ctx.fillStyle = '#e03131';
     ctx.font = 'bold 15px ' + FONT;
-    ctx.fillText('🏆 新纪录 NEW RECORD', W / 2, H / 2 - 6);
+    ctx.fillText('★ 新纪录 NEW RECORD', W / 2, H / 2 - 6);
   }
 
   /* 数据面板 */
@@ -2174,10 +2182,10 @@ function renderDead() {
 const CODEX_CARDS = [
   { img: 'enemy_shooter', name: '枪手', en: 'GUNNER', threat: 1, desc: '保持中距横向游走，两发点射。', tip: '利用掩体拆火，优先点名。' },
   { img: 'enemy_rusher', name: '突进者', en: 'RUSHER', threat: 2, desc: '红圈蓄力 0.45 秒后直线扑刺，一发致命。', tip: '蓄力瞬间横移，让刺扑空。' },
-  { img: 'enemy_shooter', name: '狙击手', en: 'SNIPER', threat: 3, desc: '红色激光锁定 1.25 秒，光珠到头即射，掩体可挡。', tip: '锁死瞬间脱离弹道，或躲进掩体。' },
-  { img: 'enemy_rusher', name: '重装兵', en: 'HEAVY', threat: 3, desc: '3 发血量，五连扇形弹幕，步步紧逼。', tip: '凝神穿透弹两发带走。' },
-  { img: 'player', name: '回响者', en: 'ECHO', threat: 2, desc: '你 1.2 秒前的残影，重演你的走位并开枪。', tip: '打破习惯：别走老路，它就打不中。' },
-  { img: 'enemy_rusher', name: '布雷者', en: 'MINER', threat: 2, desc: '横穿战场布下磐雷，引信同样遵守时间冻结。', tip: '冻结时引信停摆，静止反能安全穿雷区。' },
+  { img: 'enemy_sniper', name: '狙击手', en: 'SNIPER', threat: 3, desc: '红色激光锁定 1.25 秒，光珠到头即射，掩体可挡。', tip: '锁死瞬间脱离弹道，或躲进掩体。' },
+  { img: 'enemy_heavy', name: '重装兵', en: 'HEAVY', threat: 3, desc: '3 发血量，五连扇形弹幕，步步紧逼。', tip: '凝神穿透弹两发带走。' },
+  { img: 'enemy_echo', name: '回响者', en: 'ECHO', threat: 2, desc: '你 1.2 秒前的残影，重演你的走位并开枪。', tip: '打破习惯：别走老路，它就打不中。' },
+  { img: 'enemy_miner', name: '布雷者', en: 'MINER', threat: 2, desc: '横穿战场布下磐雷，引信同样遵守时间冻结。', tip: '冻结时引信停摆，静止反能安全穿雷区。' },
 ];
 
 function renderCodex() {
@@ -2243,7 +2251,7 @@ function drawReplay() {
     ctx.beginPath(); ctx.arc(b[0], b[1], 3.6, 0, TAU); ctx.fill();
   }
   for (const en of s.e)
-    drawSprite(en[2] === 'shooter' ? 'enemy_shooter' : 'enemy_rusher', en[0], en[1], en[3], 20, '#ff5050', 0.92);
+    drawSprite(KIND_IMG[en[2]] || 'enemy_rusher', en[0], en[1], en[3], 20, '#ff5050', 0.92);
   drawSprite('player', s.p[0], s.p[1], s.p[2], player.r, '#dfe3ea');
   ctx.textAlign = 'left';
   ctx.fillStyle = '#e03131';
