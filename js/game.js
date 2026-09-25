@@ -2052,7 +2052,7 @@ function renderHUD() {
   }
 
   /* 冲刺冷却 (桌面) */
-  if (!TOUCH && state === 'playing') {
+  if (state === 'playing') {
     panel(24, H - 78, 176, 50, { alpha: 0.04, r: 6 });
     ls('2px');
     ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = EN;
