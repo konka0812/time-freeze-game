@@ -684,7 +684,7 @@ function doDash() {
   const dxn = dl > 0.01 ? player.lastIx / dl : Math.cos(player.angle);
   const dyn = dl > 0.01 ? player.lastIy / dl : Math.sin(player.angle);
   player.vx = dxn * 950; player.vy = dyn * 950;
-  player.dashT = 0.15; player.dashCd = 1.5;
+  player.dashT = 0.15; player.dashCd = 1.2;
   player.invulnT = Math.max(player.invulnT, 0.24);
   timePulse = Math.max(timePulse, 0.5);
   shake = Math.max(shake, 3);
@@ -2057,7 +2057,7 @@ function renderHUD() {
     ls('2px');
     ctx.fillStyle = 'rgba(255,255,255,0.5)'; ctx.font = EN;
     ctx.fillText('DASH · SPACE', 36, H - 60); ls('0px');
-    const df = clamp(1 - player.dashCd / 1.5, 0, 1);
+    const df = clamp(1 - player.dashCd / 1.2, 0, 1);
     ctx.fillStyle = 'rgba(255,255,255,0.15)';
     ctx.fillRect(36, H - 50, 152, 5);
     ctx.fillStyle = df >= 1 ? '#dfe8ff' : 'rgba(255,255,255,0.4)';
@@ -2070,7 +2070,7 @@ function renderHUD() {
   /* 移动端: 动作键 */
   if (TOUCH && state === 'playing') ACT_BTNS.forEach(b => {
     let cf = 0, ct = '';
-    if (b.label === '冲刺' && player.dashCd > 0) { cf = clamp(player.dashCd / 1.5, 0, 1); ct = player.dashCd.toFixed(1); }
+    if (b.label === '冲刺' && player.dashCd > 0) { cf = clamp(player.dashCd / 1.2, 0, 1); ct = player.dashCd.toFixed(1); }
     if (b.label === '换弹' && reloadT > 0) { cf = clamp(reloadT / 1.1, 0, 1); }
     drawActBtn(b, cf, ct);
   });
@@ -2413,10 +2413,14 @@ function renderTitle() {
   ctx.textAlign = 'left';
   ctx.fillStyle = 'rgba(255,255,255,0.22)';
   ctx.font = '12px ' + FONT;
-  ctx.fillText('v5.0 · Q 切枪 · V 震动 · [ ] 音量 · M 静音 · ?demo 演示 · 素材 by gpt-image-2.5', 84, H - 26);
+  ctx.fillText('v5.2 · Q 切枪 · V 震动 · [ ] 音量 · M 静音 · ?demo 演示 · 素材 by gpt-image-2.5', 84, H - 26);
 
   iconBtn(W - 44, 38, 17, toggleFullscreen, drawFsGlyph);
   drawVignette();
+  ctx.textAlign = 'right';
+  ctx.fillStyle = 'rgba(255,255,255,0.3)';
+  ctx.font = '11px ' + FONT;
+  ctx.fillText('v5.2', W - 8, H - 8);
   drawGrain();
   drawCrosshair();
 }
