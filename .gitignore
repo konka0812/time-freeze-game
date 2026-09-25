@@ -4,3 +4,5 @@ tools/
 Thumbs.db
 patch_*.py
 assets_gen4_*.py
+素材/
+*.mp4
