@@ -603,7 +603,7 @@ function nextWave() {
     waveBanner = 2.4; waveBannerText = '第 ' + wave + ' 波';
   }
   if (wave >= 3 && wave % 3 === 0) {
-    const kind = ['slow', 'shotgun', 'slow'][(wave / 3 - 1) % 3];
+    const kind = ['shield', 'slow', 'medkit'][(wave / 3 - 1) % 3];
     items.push({ x: rand(ARENA.x + 150, ARENA.x + ARENA.w - 270), y: rand(ARENA.y + 150, ARENA.y + ARENA.h - 270), kind, t: 0 });
   }
   const stagePool = STAGES.filter(s2 => s2.key !== stageKey);
@@ -724,6 +724,8 @@ function addScore(base) {
 function killEnemyAt(idx) {
   const e = enemies[idx];
   kills++;
+  if (Math.random() < (e.kind === 'heavy' ? 0.2 : 0.05) && items.filter(it2 => it2.kind === 'medkit').length < 2)
+    items.push({ x: e.x, y: e.y, kind: 'medkit', t: 0 });
   vib(25);
   rings.push({ x: e.x, y: e.y, r: 6, v: 640, a: 0.7, c: '#ffb3b3' });
   whiteFlash = Math.max(whiteFlash, 0.07);
@@ -1075,7 +1077,14 @@ function update(dt) {
     it.t += dt;
     if (it.t > 14) { items.splice(i, 1); continue; }
     if (dist2(it.x, it.y, player.x, player.y) < 32 * 32) {
-      if (it.kind === 'shield') { player.shield = Math.min(4, player.shield + 2); addFloat(it.x, it.y - 26, '护盾 +2', '#cfe0ff', 20); }
+      if (it.kind === 'shield') {
+        if (player.shield >= 4) { score += 80; addFloat(it.x, it.y - 26, '护盾已满 +80', '#8fb0ff', 18); }
+        else { player.shield = Math.min(4, player.shield + 2); addFloat(it.x, it.y - 26, '护盾 +2', '#cfe0ff', 20); }
+      }
+      else if (it.kind === 'medkit') {
+        if (player.hp < player.hpMax) { player.hp = Math.min(player.hpMax, player.hp + 1); addFloat(it.x, it.y - 26, '生命 +1', '#7bd88f', 20); }
+        else { score += 80; addFloat(it.x, it.y - 26, '生命已满 +80', '#7bd88f', 18); }
+      }
       else if (it.kind === 'shotgun') { player.wKind = 'shotgun'; player.wpn = 'shotgun'; player.wAmmo += 6; player.wTime = Math.max(player.wTime, 12); addFloat(it.x, it.y - 26, '霰弹 +6 (Q切换)', '#ffd9a0', 20); }
       else { slowAllT = 6; addFloat(it.x, it.y - 26, '时间迟缓 6s', '#8fb0ff', 20); }
       sfx.pickup();
@@ -1891,8 +1900,8 @@ function render() {
     ctx.save();
     ctx.globalCompositeOperation = 'lighter';
     ctx.globalAlpha = 0.5;
-    const gkey = it.kind === 'shield' ? 's' : it.kind === 'shotgun' ? 'o' : 'b';
-    const gcol = it.kind === 'shield' ? 'rgba(220,235,255,0.9)' : it.kind === 'shotgun' ? 'rgba(255,180,110,0.9)' : 'rgba(90,140,255,0.9)';
+    const gkey = it.kind === 'shield' ? 's' : it.kind === 'shotgun' ? 'o' : it.kind === 'medkit' ? 'mk' : 'b';
+    const gcol = it.kind === 'shield' ? 'rgba(220,235,255,0.9)' : it.kind === 'shotgun' || it.kind === 'smg' ? 'rgba(255,180,110,0.9)' : 'rgba(90,140,255,0.9)';
     ctx.drawImage(glowFor(gkey, gcol), it.x - gsz / 2, iy2 - gsz / 2, gsz, gsz);
     ctx.restore();
     ctx.strokeStyle = it.kind === 'shield' ? '#cfe0ff' : '#8fb0ff';
@@ -1905,6 +1914,12 @@ function render() {
         i2 ? ctx.lineTo(px2, py2) : ctx.moveTo(px2, py2);
       }
       ctx.closePath(); ctx.stroke();
+    } else if (it.kind === 'medkit') {
+      ctx.fillStyle = '#fff';
+      roundRectPath(it.x - 11, iy2 - 9, 22, 18, 4); ctx.fill();
+      ctx.fillStyle = '#ff5252';
+      ctx.fillRect(it.x - 2.5, iy2 - 6, 5, 12);
+      ctx.fillRect(it.x - 6, iy2 - 2, 12, 5);
     } else if (it.kind === 'shotgun') {
       ctx.beginPath(); ctx.arc(it.x, iy2, 13, 0, TAU); ctx.stroke();
       ctx.beginPath(); ctx.arc(it.x, iy2, 6, 0, TAU); ctx.stroke();
