@@ -253,7 +253,7 @@ Promise.all([
 
 /* ---------- 音频（程序合成 v2） ---------- */
 let AC = null, master = null, muted = false, padGain = null;
-try { muted = JSON.parse(localStorage.getItem('tf_muted') || 'false'); } catch (e) {}
+try { localStorage.removeItem('tf_muted'); } catch (e) {}
 function initAudio() {
   if (AC) { AC.resume(); return; }
   AC = new (window.AudioContext || window.webkitAudioContext)();
@@ -477,7 +477,6 @@ function vib(ms) {
 function toggleMute() {
   muted = !muted;
   if (master) master.gain.value = muted ? 0 : settings.vol;
-  try { localStorage.setItem('tf_muted', JSON.stringify(muted)); } catch (e4) {}
 }
 function drawSpeakerGlyph(x, y, isMuted) {
   ctx.fillStyle = '#fff';
@@ -551,9 +550,13 @@ try { top5 = JSON.parse(localStorage.getItem('tf_top5') || '[]'); } catch (e) {}
 let lastRun = null, lastDiff = null;
 try { lastRun = JSON.parse(localStorage.getItem('tf_last') || 'null'); } catch (e) {}
 let settings = { vol: 0.5, shake: true };
-try { Object.assign(settings, JSON.parse(localStorage.getItem('tf_settings') || '{}')); } catch (e) {}
+try {
+  const sv = JSON.parse(localStorage.getItem('tf_settings') || '{}');
+  if (sv && typeof sv.shake === 'boolean') settings.shake = sv.shake;
+} catch (e) {}
+settings.vol = 0.5;
 if (!(settings.vol > 0.15)) settings.vol = 0.5;
-function saveSettings() { try { localStorage.setItem('tf_settings', JSON.stringify(settings)); } catch (e) {} }
+function saveSettings() { try { localStorage.setItem('tf_settings', JSON.stringify({ shake: settings.shake })); } catch (e) {} }
 
 /* ---------- 生成/台词 ---------- */
 function spawnPoint() {
