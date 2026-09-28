@@ -153,13 +153,6 @@ function drawButton(x, y, w, h, label, sub, action) {
     ctx.fillStyle = hov ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.4)';
     ctx.fillText(sub, x + w / 2, y + h / 2 + 18);
     ls('0px');
-    /* 阶段分割线 */
-    ctx.fillStyle = 'rgba(255,255,255,0.3)';
-    ctx.fillRect(W / 2 - 210 + 140, my + 26, 1, 9);
-    ctx.fillRect(W / 2 - 210 + 280, my + 26, 1, 9);
-    ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = 'bold 12px ' + FONT; ctx.textAlign = 'center';
-    ctx.fillText(Math.ceil(boss.hp) + ' / ' + boss.hpMax, W / 2, my + 52);
-    ls('0px');
   }
   ctx.restore();
 }
