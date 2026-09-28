@@ -1688,6 +1688,7 @@ function render() {
   if (state === 'title' || state === 'loading') { ctx.restore(); renderTitle(); return; }
 
   /* 刷怪预警 */
+  for (const t of telegraphs) {
     const p = 1 - t.t / t.dur;
     const heavy = t.kind === 'heavy';
     if (p < 0.4) {
@@ -2135,6 +2136,7 @@ function render() {
     ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = '18px ' + FONT;
     ctx.fillText('旋转手机获得最佳视野', W / 2, H / 2 + 26);
   }
+}
 
 function renderHUD() {
   if (!player) return;
