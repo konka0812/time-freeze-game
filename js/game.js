@@ -2144,6 +2144,7 @@ function render() {
   }
 
 function renderHUD() {
+  if (!player) return;
   /* 场地四角裁切线 */
   ctx.strokeStyle = 'rgba(255,255,255,0.22)';
   ctx.lineWidth = 3;
