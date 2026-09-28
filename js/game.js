@@ -596,6 +596,10 @@ function waveComp(n) {
 
 function nextWave() {
   wave++;
+  if (wave === 10) {
+    waveBanner = 4.0; waveBannerText = '通关！';
+    quoteText = '你已经证明了自己'; quoteT = 4.0;
+  }
   if (wave > 1) { player.hp = player.hpMax; addFloat(player.x, player.y - 52, '生命回满', '#7bd88f', 16); }
   if (wave % 5 === 0) {
     const [bx0, by0] = spawnPoint();
@@ -760,6 +764,9 @@ function killEnemyAt(idx) {
   shake = Math.max(shake, e.kind === 'heavy' ? 16 : 9);
   zoomPulse = 0.016;
   hitStop = 0.045;
+  if (e.kind === 'heavy') tone('sine', 70, 35, 0.25, 0.35);
+  else if (e.kind === 'boss') tone('sine', 45, 20, 0.6, 0.5);
+  else tone('triangle', 900 + ((Math.random() * 200) | 0), 400, 0.12, 0.12);
   sfx.shatter();
   enemies.splice(idx, 1);
 }
@@ -1382,6 +1389,7 @@ function update(dt) {
             e.x += Math.cos(ka) * 7; e.y += Math.sin(ka) * 7;
           }
           addFloat(e.x + rand(-6, 6), e.y - e.r - 10, '-' + dmg, b.pierce ? '#bff3ff' : '#ffd9a0', 15);
+          e.hitFlash = Math.max(e.hitFlash || 0, 0.1);
           if ((e.kind === 'heavy' || e.kind === 'boss') && e.hp > dmg) {
             e.hp -= dmg; e.hitFlash = 0.12;
             shatter(b.x, b.y, '#e03131', 5, 0.5);
@@ -2073,6 +2081,7 @@ function render() {
     ctx.fillStyle = 'rgba(255,255,255,0.55)';
     ctx.fillText('P 继续 · M 静音 · V 震动', W / 2, H / 2 + 6);
     drawButton(W / 2 - 100, H / 2 + 34, 200, 46, '继续游戏', 'RESUME · P', () => { paused = false; });
+    drawButton(W / 2 - 100, H / 2 + 92, 200, 46, '重新开始', 'RESTART', () => { paused = false; startGame(); });
   }
   if (window.__recUntil && performance.now() < window.__recUntil && Math.floor(performance.now() / 500) % 2 === 0) {
     ctx.fillStyle = 'rgba(255,60,60,0.85)';
