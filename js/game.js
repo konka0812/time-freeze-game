@@ -210,6 +210,18 @@ function drawCrosshair() {
   }
   ctx.fillStyle = '#e03131';
   ctx.beginPath(); ctx.arc(x, y, 2.2, 0, TAU); ctx.fill();
+  if (hitMarkT > 0) {
+    ctx.save();
+    ctx.globalAlpha = clamp(hitMarkT / 0.12, 0, 1);
+    ctx.strokeStyle = '#ff5252'; ctx.lineWidth = 2.5; ctx.lineCap = 'round';
+    for (const [sx2, sy2] of [[1, 1], [1, -1], [-1, 1], [-1, -1]]) {
+      ctx.beginPath();
+      ctx.moveTo(x + sx2 * 7, y + sy2 * 7);
+      ctx.lineTo(x + sx2 * 13, y + sy2 * 13);
+      ctx.stroke();
+    }
+    ctx.restore();
+  }
   ctx.restore();
 }
 
@@ -304,7 +316,7 @@ function tone(type, f0, f1, dur, vol, delay = 0) {
   o.connect(g); g.connect(master); o.start(t); o.stop(t + dur + 0.02);
 }
 const sfx = {
-  shoot()  { noiseHit(0.10, 'bandpass', 1300, 0.5); tone('square', 190, 70, 0.07, 0.25); },
+  shoot()  { noiseHit(0.10, 'bandpass', 1300 + ((Math.random() * 200) | 0), 0.5); tone('square', 190 + ((Math.random() * 24) | 0), 70, 0.07, 0.25); },
   eshoot() { noiseHit(0.12, 'bandpass', 900, 0.30); tone('square', 150, 60, 0.08, 0.15); },
   shatter(){ noiseHit(0.32, 'highpass', 2600, 0.42); tone('triangle', 2100, 1400, 0.18, 0.12); },
   heavyHit(){ tone('sine', 130, 80, 0.10, 0.35); noiseHit(0.05, 'lowpass', 700, 0.25); },
@@ -542,7 +554,7 @@ const STAGES = [
   { key: 'fog', cn: '迷雾', en: 'FOG' },
   { key: 'lowg', cn: '低重力', en: 'LOW-G' },
 ];
-let player, bullets, enemies, shards, telegraphs, flashes, floats, rings, dusts = [], stains = [], items = [], covers = [], hist = [], deathReplay = null, replayT = 0, moments = [], mines = [], supT = 0, focusT = 0, rains = [], pools = [], fogs = [], poolGrace = 0, stageKey = 'std', stageName = '标准 STANDARD', crates = [], crateT = 6, shots = 0, hitsN = 0, hitMarkT = 0, beams = []
+let player, bullets, enemies, shards, telegraphs, flashes, floats, rings, dusts = [], stains = [], items = [], covers = [], hist = [], deathReplay = null, replayT = 0, moments = [], mines = [], supT = 0, focusT = 0, rains = [], pools = [], fogs = [], poolGrace = 0, stageKey = 'std', stageName = '标准 STANDARD', crates = [], crateT = 6, shots = 0, hitsN = 0, hitMarkT = 0, grazeSlowT = 0, beams = [], nextRewardScore = 3000, comboPulse = 0
 let best = { score: 0, wave: 0, kills: 0 };
 try { best = JSON.parse(localStorage.getItem('tf_best_v2')) || best; } catch (e) {}
 let top5 = [];
@@ -632,7 +644,7 @@ function fireBullet(x, y, angle, speed, fromPlayer, tint, life, pierce, bkind) {
   bullets.push({
     x, y, vx: Math.cos(angle) * speed, vy: Math.sin(angle) * speed,
     r: 5.5, fromPlayer, trail: [], tint: tint || '#e9e9ee',
-    grazed: false, tw: rand(0, TAU), life: life === undefined ? Infinity : life, pierce: pierce || 0, kind: bkind || (fromPlayer ? 'p' : 'e'),
+    grazed: false, tw: rand(0, TAU), life: life === undefined ? Infinity : life, pierce: pierce || 0, kind: bkind || (fromPlayer ? 'p' : 'e'), counted: false,
   });
 }
 
@@ -700,7 +712,7 @@ function damagePlayer() {
     return;
   }
   player.hp--;
-  player.invulnT = 1.0;
+  player.invulnT = 1.0; player.sq = 0.8;
   redFlash = Math.max(redFlash, 0.45);
   shake = Math.max(shake, 10);
   vib(90);
@@ -758,7 +770,7 @@ function doDash() {
   const dxn = dl > 0.01 ? player.lastIx / dl : Math.cos(player.angle);
   const dyn = dl > 0.01 ? player.lastIy / dl : Math.sin(player.angle);
   player.vx = dxn * 950; player.vy = dyn * 950;
-  player.dashT = 0.15; player.dashCd = 1.2;
+  player.dashT = 0.15; player.dashCd = 1.2; player.sq = 0.76;
   player.invulnT = Math.max(player.invulnT, 0.24);
   timePulse = Math.max(timePulse, 0.5);
   shake = Math.max(shake, 3);
@@ -789,13 +801,13 @@ function startGame() {
   timeSmooth = 0; timePulse = 0; wasFrozen = true;
   shake = 0; zoomPulse = 0; hitStop = 0; redFlash = 0;
   demoT = 0;
-  player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: 20, angle: -Math.PI / 2, fireCd: 0, trail: [], dashT: 0, dashCd: 0, invulnT: 0, shield: 0, hp: 5, hpMax: 5, weapon: 'pistol', wpn: 'pistol', wKind: '', wAmmo: 0, wTime: 0, wTimeMax: 1 };
+  player = { x: W / 2, y: H / 2, vx: 0, vy: 0, r: 20, angle: -Math.PI / 2, fireCd: 0, trail: [], dashT: 0, dashCd: 0, invulnT: 0, shield: 0, sq: 1, hp: 5, hpMax: 5, weapon: 'pistol', wpn: 'pistol', wKind: '', wAmmo: 0, wTime: 0, wTimeMax: 1 };
   bullets = []; enemies = []; shards = []; telegraphs = []; flashes = []; floats = []; rings = [];
   dusts = [];
   for (let i = 0; i < 46; i++)
     dusts.push({ x: rand(ARENA.x, ARENA.x + ARENA.w), y: rand(ARENA.y, ARENA.y + ARENA.h),
       vx: rand(-9, 9), vy: rand(-7, 7), r: rand(0.8, 2.3), ph: rand(0, TAU) });
-  tickT = 0; hbT = 0; slowAllT = 0; slowmoT = 0; stains = []; items = []; mines = []; supT = 0; focusT = 0; shots = 0; hitsN = 0; hitMarkT = 0; beams = []; crates = []; crateT = 5; rains = []; pools = []; fogs = []; poolGrace = 0; stageKey = 'std'; stageName = '标准 STANDARD';
+  tickT = 0; hbT = 0; slowAllT = 0; slowmoT = 0; stains = []; items = []; mines = []; supT = 0; focusT = 0; shots = 0; hitsN = 0; hitMarkT = 0; nextRewardScore = 3000; comboPulse = 0; beams = []; crates = []; crateT = 5; rains = []; pools = []; fogs = []; poolGrace = 0; stageKey = 'std'; stageName = '标准 STANDARD';
   covers = makeCovers(); hist = []; deathReplay = null; replayT = 0; moments = []; bgmStep = 0; bgmT = 0;
   const wq = new URLSearchParams(location.search).get('wpn');
   if (wq && WDATA[wq]) {
@@ -848,6 +860,7 @@ function update(dt) {
   const ACC = 2600, MAXV = stageKey === 'lowg' ? 335 : 290;
   player.dashCd = Math.max(0, player.dashCd - dt);
   player.invulnT = Math.max(0, player.invulnT - dt);
+  player.sq += (1 - player.sq) * Math.min(1, dt * 8);
   player.lastIx = ix; player.lastIy = iy;
   if ((keys.Space || keys.ShiftLeft) && player.dashCd <= 0) doDash();
   player.vx += ix * ACC * dt;
@@ -983,6 +996,8 @@ function update(dt) {
       flashes.push({ x: mx, y: my, a: player.angle, t: 0.07, size: 26, col: '255,220,120' });
       shake = Math.max(shake, 4);
       sfx.shoot();
+      shards.push({ x: mx, y: my, vx: Math.cos(player.angle) * rand(20, 50) + rand(-15, 15), vy: Math.sin(player.angle) * rand(20, 50) + rand(-15, 15),
+        rot: 0, vr: 0, size: rand(2, 4), color: 'rgba(180,180,190,0.4)', life: 0.35, puff: true });
       const side = Math.random() < 0.5 ? 1 : -1;
       const caA = player.angle + Math.PI / 2 * side;
       shards.push({ x: player.x + Math.cos(player.angle) * 20, y: player.y + Math.sin(player.angle) * 20,
@@ -1013,12 +1028,14 @@ function update(dt) {
   else focusT = Math.max(0, focusT - dt * 2.5);
   let wdt = dt * timeSmooth;
   if (slowAllT > 0) { slowAllT -= dt; wdt *= 0.5; }
+  if (grazeSlowT > 0) { grazeSlowT -= dt; wdt *= 0.35; }
   if (slowmoT > 0) { slowmoT -= dt; wdt *= 0.35; }
   if (padGain) padGain.gain.value = (1 - timeSmooth) * 0.055;
 
-  /* 氛围声: 世界流动=时钟滴答, 冻结=你的心跳 */
+  /* 氛围声: 世界流动=时钟滴答, 冻结/残血=你的心跳 */
   if (AC) {
-    if (timeSmooth > 0.35) { tickT -= dt * timeSmooth; if (tickT <= 0) { tickT = 0.5; sfx.tick(); } }
+    if (player.hp <= 1) { hbT -= dt; if (hbT <= 0) { hbT = 0.85; sfx.heart(); } }
+    else if (timeSmooth > 0.35) { tickT -= dt * timeSmooth; if (tickT <= 0) { tickT = 0.5; sfx.tick(); } }
     else { hbT -= dt; if (hbT <= 0) { hbT = 1.15; sfx.heart(); } }
   }
   /* 程序化BGM: 旋律随世界时间步进——冻结时音乐也停 */
@@ -1360,6 +1377,11 @@ function update(dt) {
         if (dist2(b.x, b.y, e.x, e.y) < (b.r + e.r) * (b.r + e.r)) {
           const dmg = b.pierce ? 2 : 1;
           if (!b.hitCounted) { b.hitCounted = true; hitsN++; hitMarkT = 0.12; }
+          if (e.kind !== 'boss') {
+            const ka = Math.atan2(b.vy, b.vx);
+            e.x += Math.cos(ka) * 7; e.y += Math.sin(ka) * 7;
+          }
+          addFloat(e.x + rand(-6, 6), e.y - e.r - 10, '-' + dmg, b.pierce ? '#bff3ff' : '#ffd9a0', 15);
           if ((e.kind === 'heavy' || e.kind === 'boss') && e.hp > dmg) {
             e.hp -= dmg; e.hitFlash = 0.12;
             shatter(b.x, b.y, '#e03131', 5, 0.5);
@@ -1375,6 +1397,7 @@ function update(dt) {
         damagePlayer(); bullets.splice(i, 1);
       } else if (!b.grazed && dd < 46 * 46) {       // 擦弹
         b.grazed = true; grazes++; score += 30;
+        grazeSlowT = 0.07;
         addFloat(player.x, player.y - 34, '险!', '#8fb0ff', 24);
         hitStop = Math.max(hitStop, 0.03);
         rings.push({ x: player.x, y: player.y, r: 14, v: 520, a: 0.4, c: '#8fb0ff' });
@@ -1425,6 +1448,15 @@ function update(dt) {
     e: enemies.map(e2 => [e2.x, e2.y, e2.kind === 'boss' ? 'rusher' : e2.kind === 'shooter' || e2.kind === 'sniper' ? 'shooter' : 'rusher', e2.angle]) });
   if (hist.length > 44) hist.shift();
 
+  /* 里程碑奖励: 每 3000 分送 1 格护盾 */
+  if (score >= nextRewardScore) {
+    nextRewardScore += 3000;
+    player.shield = Math.min(4, player.shield + 1);
+    addFloat(player.x, player.y - 64, '护盾奖励 +1', '#cfe0ff', 20);
+    rings.push({ x: player.x, y: player.y, r: 16, v: 700, a: 0.6, c: '#8fb0ff' });
+    sfx.pickup();
+  }
+
   /* --- 波次推进 --- */
   const alive = enemies.length + telegraphs.length;
   if (update._prevAlive > 0 && alive === 0) { slowmoT = 0.9; zoomPulse = Math.max(zoomPulse, 0.014); }
@@ -1436,10 +1468,12 @@ function update(dt) {
   } else update._rest = null;
 
   shake = Math.max(0, shake - dt * 40);
+  hitMarkT = Math.max(0, hitMarkT - dt);
   zoomPulse = Math.max(0, zoomPulse - dt * 0.08);
   redFlash = Math.max(0, redFlash - dt * 1.6);
   whiteFlash = Math.max(0, whiteFlash - dt * 2.4);
   waveBanner = Math.max(0, waveBanner - dt);
+  comboPulse = Math.max(0, comboPulse - dt * 3);
   quoteT = Math.max(0, quoteT - dt);
 }
 
@@ -1507,15 +1541,16 @@ function toggleFullscreen() {
 }
 
 /* ---------- 渲染 ---------- */
-function drawSprite(name, x, y, angle, r, fallbackColor, alpha = 1, scale = 1) {
+function drawSprite(name, x, y, angle, r, fallbackColor, alpha = 1, scale = 1, sy = 1) {
   ctx.save();
   ctx.translate(x, y);
   ctx.rotate(angle + Math.PI / 2);
+  ctx.scale(2 - sy, sy);
   ctx.globalAlpha = alpha;
   const im = IMG[name];
   if (im) {
     const s = r * 2.35 * scale;
-    ctx.drawImage(im, -s / 2, -s / 2, s, s);
+    ctx.drawImage(im, -s / 2, -s * sy / 2, s, s * sy);
   } else {
     ctx.fillStyle = fallbackColor;
     ctx.beginPath(); ctx.arc(0, 0, r, 0, TAU); ctx.fill();
@@ -1819,7 +1854,9 @@ function render() {
     ctx.globalAlpha = player.invulnT > 0 ? 0.4 + 0.3 * Math.sin(playT * 40) : 0.5;
     ctx.drawImage(GLOW_PLAYER(), player.x - pg / 2, player.y - pg / 2, pg, pg);
     ctx.restore();
-    drawSprite('player', player.x, player.y, player.angle, player.r, '#dfe3ea');
+    const hurtGlow = player.invulnT > 0.7;
+    drawSprite('player', player.x, player.y, player.angle, player.r, '#dfe3ea', hurtGlow ? 1 : 1, 1, player.sq);
+    if (hurtGlow) { ctx.save(); ctx.globalAlpha = 0.5; ctx.fillStyle = '#fff'; ctx.beginPath(); ctx.arc(player.x, player.y, player.r * 1.15, 0, TAU); ctx.fill(); ctx.restore(); }
     if (player.shield > 0) {
       ctx.strokeStyle = 'rgba(140,175,255,0.8)'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(player.x, player.y, player.r + 9 + Math.sin(playT * 4) * 1.5, 0, TAU); ctx.stroke();
@@ -2003,6 +2040,12 @@ function render() {
   if (supT > 0) {
     ctx.fillStyle = 'rgba(224,49,49,0.08)';
     ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
+    const pv = 0.10 + 0.06 * Math.sin(playT * 5);
+    const lv = ctx.createRadialGradient(W / 2, H / 2, H * 0.42, W / 2, H / 2, W * 0.72);
+    lv.addColorStop(0, 'rgba(224,49,49,0)');
+    lv.addColorStop(1, 'rgba(224,49,49,' + (player.hp === 1 ? 0.16 : 0.08).toFixed(3) + ')');
+    ctx.fillStyle = lv;
+    ctx.fillRect(0, 0, W, H);
   }
   ctx.restore();   // 相机变换结束
 
@@ -2091,7 +2134,8 @@ function renderHUD() {
     }
   ctx.font = '13px ' + FONT;
   ctx.fillStyle = 'rgba(255,255,255,0.55)';
-  ctx.fillText('击杀 ' + kills + ' · 擦弹 ' + grazes, 24, 106);
+  const acc = shots ? Math.round(hitsN / shots * 100) : 100;
+  ctx.fillText('击杀 ' + kills + ' · 擦弹 ' + grazes + ' · 命中 ' + acc + '%', 24, 106);
   ls('1px');
   ctx.font = 'bold 14px ' + FONT;
   ctx.fillStyle = '#fff';
@@ -2133,13 +2177,19 @@ function renderHUD() {
   }
   const boss = enemies.find(b2 => b2.kind === 'boss');
   if (boss) {
-    ctx.fillStyle = 'rgba(255,255,255,0.14)';
-    roundRectPath(W / 2 - 210, my + 20, 420, 9, 4); ctx.fill();
-    ctx.fillStyle = '#ff5252';
-    roundRectPath(W / 2 - 210, my + 20, Math.max(8, 420 * boss.hp / boss.hpMax), 9, 4); ctx.fill();
     ls('2px');
     ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = EN;
-    ctx.fillText('CRYSTAL WARDEN · 红晶守卫', W / 2, my + 46);
+    ctx.fillText('CRYSTAL WARDEN · 红晶守卫', W / 2, my + 20);
+    ls('0px');
+    ctx.fillStyle = 'rgba(255,255,255,0.14)';
+    roundRectPath(W / 2 - 210, my + 26, 420, 9, 4); ctx.fill();
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,82,82,0.8)'; ctx.shadowBlur = 10;
+    ctx.fillStyle = '#ff5252';
+    roundRectPath(W / 2 - 210, my + 26, Math.max(8, 420 * boss.hp / boss.hpMax), 9, 4); ctx.fill();
+    ctx.restore();
+    ctx.fillStyle = '#fff'; ctx.font = 'bold 12px ' + FONT; ctx.textAlign = 'center';
+    ctx.fillText(Math.ceil(boss.hp) + ' / ' + boss.hpMax, W / 2, my + 52);
     ls('0px');
   }
 
