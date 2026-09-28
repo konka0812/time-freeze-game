@@ -153,6 +153,13 @@ function drawButton(x, y, w, h, label, sub, action) {
     ctx.fillStyle = hov ? 'rgba(255,255,255,0.85)' : 'rgba(255,255,255,0.4)';
     ctx.fillText(sub, x + w / 2, y + h / 2 + 18);
     ls('0px');
+    /* 阶段分割线 */
+    ctx.fillStyle = 'rgba(255,255,255,0.3)';
+    ctx.fillRect(W / 2 - 210 + 140, my + 26, 1, 9);
+    ctx.fillRect(W / 2 - 210 + 280, my + 26, 1, 9);
+    ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = 'bold 12px ' + FONT; ctx.textAlign = 'center';
+    ctx.fillText(Math.ceil(boss.hp) + ' / ' + boss.hpMax, W / 2, my + 52);
+    ls('0px');
   }
   ctx.restore();
 }
@@ -747,6 +754,8 @@ function killEnemyAt(idx) {
   whiteFlash = Math.max(whiteFlash, 0.07);
   shatter(e.x, e.y, '#ffb3b3', 5, 0.45);
   addScore(e.kind === 'boss' ? 2000 : e.kind === 'sniper' ? 150 : e.kind === 'echo' ? 250 : e.kind === 'miner' ? 200 : e.kind === 'rusher' ? 120 : e.kind === 'shooter' ? 100 : 300);
+  const KANN = { 5: 'FRENZY!', 10: 'RAMPAGE!', 15: 'UNSTOPPABLE!', 20: 'GODLIKE!' };
+  if (KANN[combo]) { killAnnounceText = KANN[combo]; killAnnounceT = 1.5; killAnnounceScale = 1.6; }
   if (e.kind === 'boss') {
     slowmoT = 1.2; shake = 30; whiteFlash = 0.15;
     quoteText = '守卫已破 · WARDEN DOWN'; quoteT = 2.6;
@@ -814,7 +823,7 @@ function startGame() {
   for (let i = 0; i < 46; i++)
     dusts.push({ x: rand(ARENA.x, ARENA.x + ARENA.w), y: rand(ARENA.y, ARENA.y + ARENA.h),
       vx: rand(-9, 9), vy: rand(-7, 7), r: rand(0.8, 2.3), ph: rand(0, TAU) });
-  tickT = 0; hbT = 0; slowAllT = 0; slowmoT = 0; stains = []; items = []; mines = []; supT = 0; focusT = 0; shots = 0; hitsN = 0; hitMarkT = 0; nextRewardScore = 3000; comboPulse = 0; beams = []; crates = []; crateT = 5; rains = []; pools = []; fogs = []; poolGrace = 0; stageKey = 'std'; stageName = '标准 STANDARD';
+  tickT = 0; hbT = 0; slowAllT = 0; slowmoT = 0; stains = []; items = []; mines = []; supT = 0; focusT = 0; shots = 0; hitsN = 0; hitMarkT = 0; nextRewardScore = 3000; comboPulse = 0; displayScore = 0; killAnnounceT = 0; killAnnounceScale = 0; dmgDirT = 0; hpPipFx = -1; hpPipFxT = 0; beams = []; crates = []; crateT = 5; rains = []; pools = []; fogs = []; poolGrace = 0; stageKey = 'std'; stageName = '标准 STANDARD';
   covers = makeCovers(); hist = []; deathReplay = null; replayT = 0; moments = []; bgmStep = 0; bgmT = 0;
   const wq = new URLSearchParams(location.search).get('wpn');
   if (wq && WDATA[wq]) {
@@ -1390,8 +1399,9 @@ function update(dt) {
           }
           addFloat(e.x + rand(-6, 6), e.y - e.r - 10, '-' + dmg, b.pierce ? '#bff3ff' : '#ffd9a0', 15);
           e.hitFlash = Math.max(e.hitFlash || 0, 0.1);
+          e.hitFlash = 0.1;
           if ((e.kind === 'heavy' || e.kind === 'boss') && e.hp > dmg) {
-            e.hp -= dmg; e.hitFlash = 0.12;
+            e.hp -= dmg;
             shatter(b.x, b.y, '#e03131', 5, 0.5);
             sfx.heavyHit();
           } else killEnemyAt(j);
@@ -1402,6 +1412,7 @@ function update(dt) {
     } else {
       const dd = dist2(b.x, b.y, player.x, player.y);
       if (state === 'playing' && player.invulnT <= 0 && dd < (b.r + player.r * 0.8) ** 2) {
+        dmgDirAngle = Math.atan2(b.y - player.y, b.x - player.x); dmgDirT = 0.5;
         damagePlayer(); bullets.splice(i, 1);
       } else if (!b.grazed && dd < 46 * 46) {       // 擦弹
         b.grazed = true; grazes++; score += 30;
@@ -1477,11 +1488,16 @@ function update(dt) {
 
   shake = Math.max(0, shake - dt * 40);
   hitMarkT = Math.max(0, hitMarkT - dt);
+  displayScore += (score - displayScore) * Math.min(1, dt * 8);
+  if (Math.abs(score - displayScore) < 1) displayScore = score;
   zoomPulse = Math.max(0, zoomPulse - dt * 0.08);
   redFlash = Math.max(0, redFlash - dt * 1.6);
   whiteFlash = Math.max(0, whiteFlash - dt * 2.4);
   waveBanner = Math.max(0, waveBanner - dt);
   comboPulse = Math.max(0, comboPulse - dt * 3);
+  killAnnounceT = Math.max(0, killAnnounceT - dt);
+  killAnnounceScale = Math.max(0, killAnnounceScale - dt * 3);
+  dmgDirT = Math.max(0, dmgDirT - dt);
   quoteT = Math.max(0, quoteT - dt);
 }
 
@@ -1679,14 +1695,27 @@ function render() {
   if (state === 'title' || state === 'loading') { ctx.restore(); renderTitle(); return; }
 
   /* 刷怪预警 */
-  for (const t of telegraphs) {
     const p = 1 - t.t / t.dur;
     const heavy = t.kind === 'heavy';
-    ctx.strokeStyle = 'rgba(224,49,49,' + (0.7 * (1 - p) + 0.3) + ')';
-    ctx.lineWidth = heavy ? 5 : 3;
-    ctx.beginPath(); ctx.arc(t.x, t.y, (heavy ? 16 : 10) + p * (heavy ? 46 : 34), 0, TAU); ctx.stroke();
-    ctx.fillStyle = 'rgba(224,49,49,0.22)';
-    ctx.beginPath(); ctx.arc(t.x, t.y, heavy ? 30 : 22, 0, TAU); ctx.fill();
+    if (p < 0.4) {
+      ctx.strokeStyle = 'rgba(200,50,50,' + (0.3 + p * 1.2).toFixed(2) + ')';
+      ctx.lineWidth = 1.5;
+      for (let c2 = 0; c2 < 5; c2++) {
+        const ca2 = c2 / 5 * TAU + p * 2;
+        const cr2 = 8 + p * 12;
+        ctx.beginPath();
+        ctx.moveTo(t.x + Math.cos(ca2) * cr2 * 0.3, t.y + Math.sin(ca2) * cr2 * 0.3);
+        ctx.lineTo(t.x + Math.cos(ca2) * cr2, t.y + Math.sin(ca2) * cr2);
+        ctx.stroke();
+      }
+    } else {
+      const bp = (p - 0.4) / 0.6;
+      ctx.fillStyle = 'rgba(224,49,49,' + (0.12 + bp * 0.15).toFixed(2) + ')';
+      ctx.beginPath(); ctx.arc(t.x, t.y, (heavy ? 26 : 18) + bp * 14, 0, TAU); ctx.fill();
+      ctx.strokeStyle = 'rgba(255,80,80,' + (0.35 + bp * 0.45).toFixed(2) + ')';
+      ctx.lineWidth = heavy ? 4 : 2.5;
+      ctx.beginPath(); ctx.arc(t.x, t.y, (heavy ? 22 : 14) + bp * 22, 0, TAU); ctx.stroke();
+    }
   }
 
   /* 时间核波 */
@@ -1926,6 +1955,12 @@ function render() {
     ctx.fillText(c2.kind === 'shotgun' ? '霰' : c2.kind === 'smg' ? '冲' : c2.kind === 'rail' ? '轨' : '蜂', 0, 4);
   }
 
+  /* 场景色调 */
+  if (stageKey === 'storm') { ctx.fillStyle = 'rgba(30,50,120,0.06)'; ctx.fillRect(0, 0, W, H); }
+  else if (stageKey === 'magma') { ctx.fillStyle = 'rgba(200,50,20,0.05)'; ctx.fillRect(0, 0, W, H); }
+  else if (stageKey === 'fog') { ctx.fillStyle = 'rgba(80,110,90,0.05)'; ctx.fillRect(0, 0, W, H); }
+  else if (stageKey === 'lowg') { ctx.fillStyle = 'rgba(80,50,160,0.05)'; ctx.fillRect(0, 0, W, H); }
+
   /* 迷雾团 */
   if (stageKey === 'fog') {
     for (const f2 of fogs) {
@@ -2048,10 +2083,11 @@ function render() {
   if (supT > 0) {
     ctx.fillStyle = 'rgba(224,49,49,0.08)';
     ctx.fillRect(ARENA.x, ARENA.y, ARENA.w, ARENA.h);
-    const pv = 0.10 + 0.06 * Math.sin(playT * 5);
-    const lv = ctx.createRadialGradient(W / 2, H / 2, H * 0.42, W / 2, H / 2, W * 0.72);
+    const pv = 0.14 + 0.08 * Math.sin(playT * 5);
+    const lv = ctx.createRadialGradient(W / 2, H / 2, H * 0.35, W / 2, H / 2, W * 0.65);
     lv.addColorStop(0, 'rgba(224,49,49,0)');
-    lv.addColorStop(1, 'rgba(224,49,49,' + (player.hp === 1 ? 0.16 : 0.08).toFixed(3) + ')');
+    lv.addColorStop(0.7, 'rgba(200,30,30,' + (0.06).toFixed(3) + ')');
+    lv.addColorStop(1, 'rgba(180,20,20,' + pv.toFixed(3) + ')');
     ctx.fillStyle = lv;
     ctx.fillRect(0, 0, W, H);
   }
@@ -2106,7 +2142,6 @@ function render() {
     ctx.fillStyle = 'rgba(255,255,255,0.6)'; ctx.font = '18px ' + FONT;
     ctx.fillText('旋转手机获得最佳视野', W / 2, H / 2 + 26);
   }
-}
 
 function renderHUD() {
   /* 场地四角裁切线 */
@@ -2148,11 +2183,43 @@ function renderHUD() {
   ls('1px');
   ctx.font = 'bold 14px ' + FONT;
   ctx.fillStyle = '#fff';
-  ctx.fillText('SCORE ' + score.toLocaleString(), 24, 130);
+  ctx.fillText('SCORE ' + Math.round(displayScore).toLocaleString(), 24, 130);
   ls('0px');
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.font = '12px ' + FONT;
   ctx.fillText('场景 · ' + stageName, 24, 152);
+
+  /* 受击方向指示器 */
+  if (dmgDirT > 0 && state === 'playing') {
+    ctx.save();
+    ctx.translate(player.x, player.y);
+    ctx.rotate(dmgDirAngle);
+    ctx.globalAlpha = clamp(dmgDirT / 0.5, 0, 1) * 0.7;
+    ctx.fillStyle = '#ff5252';
+    ctx.beginPath();
+    ctx.moveTo(56, 0); ctx.lineTo(42, -10); ctx.lineTo(42, 10);
+    ctx.closePath(); ctx.fill();
+    ctx.restore();
+    ctx.globalAlpha = 1;
+  }
+
+  /* 击杀播报大字 */
+  if (killAnnounceT > 0) {
+    const ka2 = 1.6 - killAnnounceScale;
+    const ka2s = 1 + (1 - Math.min(1, ka2 / 1.6)) * 0.3;
+    const ka2a = Math.min(1, killAnnounceT / 0.5);
+    ctx.save();
+    ctx.translate(W / 2, H / 2 - 200);
+    ctx.scale(ka2s, ka2s);
+    ctx.globalAlpha = ka2a;
+    ctx.fillStyle = '#ff5252'; ctx.font = 'bold 72px ' + FONT;
+    ctx.textAlign = 'center';
+    ctx.fillText(killAnnounceText, 0, 0);
+    ctx.strokeStyle = 'rgba(255,255,255,0.3)'; ctx.lineWidth = 1.5;
+    ctx.strokeText(killAnnounceText, 0, 0);
+    ctx.restore();
+    ctx.globalAlpha = 1; ctx.textAlign = 'left';
+  }
 
   /* 连击徽章（带衰减条） */
   if (combo >= 2) {
@@ -2671,6 +2738,11 @@ function renderTitle() {
 }
 
 /* ---------- 主循环 ---------- */
+let killAnnounceT = 0, killAnnounceText = '', killAnnounceScale = 0;
+let displayScore = 0;
+let dmgDirAngle = 0, dmgDirT = 0;
+let stageGradeAlpha = 0;
+let hpPipFx = -1, hpPipFxT = 0;
 let last = performance.now();
 function loop(now) {
   const dt = Math.min(0.033, (now - last) / 1000);
