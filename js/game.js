@@ -140,6 +140,13 @@ function drawButton(x, y, w, h, label, sub, action) {
   const hov = mouse.x >= x && mouse.x <= x + w && mouse.y >= y && mouse.y <= y + h;
   uiButtons.push({ x, y, w, h, action });
   ctx.save();
+  /* 斜切平行四边形路径(设计稿风格) */
+  const sk = Math.min(14, h * 0.28);
+  const para = () => {
+    ctx.beginPath();
+    ctx.moveTo(x + sk, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w - sk, y + h); ctx.lineTo(x, y + h);
+    ctx.closePath();
+  };
   /* 玻璃质感底 */
   const bg = ctx.createLinearGradient(x, y, x, y + h);
   if (hov) {
@@ -150,7 +157,7 @@ function drawButton(x, y, w, h, label, sub, action) {
     bg.addColorStop(1, 'rgba(255,255,255,0.02)');
   }
   ctx.fillStyle = bg;
-  roundRectPath(x, y, w, h, 4); ctx.fill();
+  para(); ctx.fill();
   /* 顶部高光线 */
   ctx.strokeStyle = hov ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.18)';
   ctx.lineWidth = 1;
@@ -160,14 +167,14 @@ function drawButton(x, y, w, h, label, sub, action) {
   ctx.shadowBlur = hov ? 16 : 9;
   ctx.strokeStyle = hov ? 'rgba(255,120,120,0.95)' : 'rgba(224,49,49,0.78)';
   ctx.lineWidth = 1.5;
-  roundRectPath(x, y, w, h, 4); ctx.stroke();
+  para(); ctx.stroke();
   ctx.shadowBlur = 0;
-  const tk = Math.min(10, w / 5);
-  ctx.strokeStyle = hov ? '#fff' : 'rgba(224,49,49,0.95)'; ctx.lineWidth = 2;
+  /* 内侧细描边(霓虹双线) */
+  ctx.strokeStyle = hov ? 'rgba(255,255,255,0.5)' : 'rgba(224,49,49,0.35)';
+  ctx.lineWidth = 1;
   ctx.beginPath();
-  ctx.moveTo(x, y + tk); ctx.lineTo(x, y); ctx.lineTo(x + tk, y);
-  ctx.moveTo(x + w - tk, y + h); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w, y + h - tk);
-  ctx.stroke();
+  ctx.moveTo(x + sk + 4, y + 3.5); ctx.lineTo(x + w - 4, y + 3.5); ctx.lineTo(x + w - sk - 4, y + h - 3.5); ctx.lineTo(x + 4, y + h - 3.5);
+  ctx.closePath(); ctx.stroke();
   ctx.textAlign = 'center';
   if (hov) { ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.font = 'bold 15px ' + FONT; ctx.fillText('▸', x + 18, y + h / 2 - (sub ? 4 : 8)); }
   ctx.fillStyle = '#fff';
@@ -1731,6 +1738,16 @@ function render() {
       }
     }
     ctx.strokeStyle = rc.pal.rim; ctx.lineWidth = 1.5; ctx.stroke();
+    /* 红霓虹角线(设计稿风格: 四角亮红L形) */
+    const tk2 = Math.min(10, rc.w / 4, rc.h / 4);
+    ctx.save();
+    ctx.shadowColor = 'rgba(255,60,60,0.7)'; ctx.shadowBlur = 6;
+    ctx.strokeStyle = 'rgba(255,82,82,0.9)'; ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.moveTo(rc.x, rc.y + tk2); ctx.lineTo(rc.x, rc.y); ctx.lineTo(rc.x + tk2, rc.y);
+    ctx.moveTo(rc.x + rc.w - tk2, rc.y + rc.h); ctx.lineTo(rc.x + rc.w, rc.y + rc.h); ctx.lineTo(rc.x + rc.w, rc.y + rc.h - tk2);
+    ctx.stroke();
+    ctx.restore();
   }
   ctx.globalAlpha = 1;
   /* 击杀血渍 */
@@ -1958,6 +1975,14 @@ function render() {
     if (player.shield > 0) {
       ctx.strokeStyle = 'rgba(140,175,255,0.8)'; ctx.lineWidth = 2;
       ctx.beginPath(); ctx.arc(player.x, player.y, player.r + 9 + Math.sin(playT * 4) * 1.5, 0, TAU); ctx.stroke();
+      /* 护罩两侧刻度弧(设计稿元素) */
+      ctx.strokeStyle = 'rgba(143,176,255,0.55)'; ctx.lineWidth = 3;
+      const sr = player.r + 17;
+      for (const side of [-1, 1]) {
+        const a0 = side > 0 ? -0.5 : Math.PI - 0.5;
+        ctx.beginPath(); ctx.arc(player.x, player.y, sr, a0, a0 + 1.0); ctx.stroke();
+        ctx.beginPath(); ctx.arc(player.x, player.y, sr, a0 + 1.2, a0 + 1.4); ctx.stroke();
+      }
     }
     if (focusT > 0.15) {
       const fp = clamp(focusT / 2.2, 0, 1);
@@ -2208,13 +2233,20 @@ function render() {
 function renderHUD() {
   if (!player) return;
   /* 场地四角裁切线 */
-  ctx.strokeStyle = 'rgba(255,255,255,0.22)';
+  ctx.strokeStyle = 'rgba(143,176,255,0.5)';
   ctx.lineWidth = 3;
   const cm = 26;
   for (const [cx, cy, sx, sy] of [[ARENA.x + 18, ARENA.y + 18, 1, 1], [ARENA.x + ARENA.w - 18, ARENA.y + 18, -1, 1], [ARENA.x + 18, ARENA.y + ARENA.h - 18, 1, -1], [ARENA.x + ARENA.w - 18, ARENA.y + ARENA.h - 18, -1, -1]]) {
     ctx.beginPath();
     ctx.moveTo(cx + sx * cm, cy); ctx.lineTo(cx, cy); ctx.lineTo(cx, cy + sy * cm);
     ctx.stroke();
+    /* 内层白细线(双层霓虹) */
+    ctx.save();
+    ctx.strokeStyle = 'rgba(255,255,255,0.35)'; ctx.lineWidth = 1;
+    ctx.beginPath();
+    ctx.moveTo(cx + sx * (cm - 5), cy + sy * 3); ctx.lineTo(cx + sx * 3, cy + sy * 3); ctx.lineTo(cx + sx * 3, cy + sy * (cm - 5));
+    ctx.stroke();
+    ctx.restore();
   }
 
   /* 左上: 波次信息 */
@@ -2308,10 +2340,26 @@ function renderHUD() {
   ctx.font = 'bold 17px ' + FONT;
   ctx.fillStyle = supT > 0 ? '#ff3b3b' : frozen ? '#8fb0ff' : '#ff5252';
   ctx.fillText(supT > 0 ? '!! 时锁压制' : frozen ? '■ 时间静止' : '▶ 时间流动', W / 2, 36);
+  /* 斜切发光进度条(设计稿样式) */
+  const colMain = supT > 0 ? '#ff3b3b' : frozen ? '#8fb0ff' : '#ff5252';
+  const colGlow2 = supT > 0 ? 'rgba(255,59,59,0.35)' : frozen ? 'rgba(143,176,255,0.35)' : 'rgba(255,82,82,0.35)';
+  const tsk = 6;
   ctx.fillStyle = 'rgba(255,255,255,0.14)';
-  roundRectPath(mx, my, mw, 4, 2); ctx.fill();
-  ctx.fillStyle = frozen ? '#8fb0ff' : '#ff5252';
-  roundRectPath(mx, my, Math.max(6, mw * clamp(timeSmooth, 0.02, 1)), 4, 2); ctx.fill();
+  ctx.beginPath();
+  ctx.moveTo(mx + tsk, my); ctx.lineTo(mx + mw, my); ctx.lineTo(mx + mw - tsk, my + 7); ctx.lineTo(mx, my + 7);
+  ctx.closePath(); ctx.fill();
+  const tw = Math.max(10, mw * clamp(timeSmooth, 0.04, 1));
+  ctx.save();
+  ctx.shadowColor = colGlow2; ctx.shadowBlur = 10;
+  ctx.fillStyle = colMain;
+  ctx.beginPath();
+  ctx.moveTo(mx + tsk, my); ctx.lineTo(mx + tw, my); ctx.lineTo(mx + tw - tsk, my + 7); ctx.lineTo(mx, my + 7);
+  ctx.closePath(); ctx.fill();
+  ctx.restore();
+  ctx.fillStyle = 'rgba(255,255,255,0.45)';
+  ctx.beginPath();
+  ctx.moveTo(mx + tsk + 2, my + 1); ctx.lineTo(mx + Math.max(12, tw - 2), my + 1); ctx.lineTo(mx + Math.max(6, tw - tsk - 2), my + 2.5); ctx.lineTo(mx + 2, my + 2.5);
+  ctx.closePath(); ctx.fill();
   if (slowAllT > 0) {
     ctx.fillStyle = '#8fb0ff';
     ctx.font = 'bold 13px ' + FONT;
@@ -2746,6 +2794,15 @@ function renderTitle() {
 
   /* 左侧标题排版 */
   ctx.textAlign = 'left';
+  /* 红色光速线(设计稿标志性元素) */
+  ctx.save();
+  ctx.shadowColor = 'rgba(224,49,49,0.9)'; ctx.shadowBlur = 8;
+  ctx.fillStyle = 'rgba(224,49,49,0.85)';
+  ctx.fillRect(0, 236, 64, 3);
+  ctx.fillRect(0, 352, 46, 2);
+  ctx.globalAlpha = 0.5;
+  ctx.fillRect(0, 244, 40, 1.5);
+  ctx.restore();
   ctx.fillStyle = '#e03131';
   ctx.fillRect(84, 148, 46, 4);
   /* 标题冰蓝余晖(冷光衬红句点) */
