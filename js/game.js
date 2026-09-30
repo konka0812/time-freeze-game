@@ -140,8 +140,34 @@ function drawButton(x, y, w, h, label, sub, action) {
   const hov = mouse.x >= x && mouse.x <= x + w && mouse.y >= y && mouse.y <= y + h;
   uiButtons.push({ x, y, w, h, action });
   ctx.save();
-  if (hov) { ctx.fillStyle = '#e03131'; roundRectPath(x, y, w, h, 4); ctx.fill(); }
-  else { ctx.strokeStyle = 'rgba(255,255,255,0.55)'; ctx.lineWidth = 1.5; roundRectPath(x, y, w, h, 4); ctx.stroke(); }
+  /* 玻璃质感底 */
+  const bg = ctx.createLinearGradient(x, y, x, y + h);
+  if (hov) {
+    bg.addColorStop(0, 'rgba(224,49,49,0.92)');
+    bg.addColorStop(1, 'rgba(160,28,28,0.92)');
+  } else {
+    bg.addColorStop(0, 'rgba(255,255,255,0.07)');
+    bg.addColorStop(1, 'rgba(255,255,255,0.02)');
+  }
+  ctx.fillStyle = bg;
+  roundRectPath(x, y, w, h, 4); ctx.fill();
+  /* 顶部高光线 */
+  ctx.strokeStyle = hov ? 'rgba(255,255,255,0.35)' : 'rgba(255,255,255,0.18)';
+  ctx.lineWidth = 1;
+  ctx.beginPath(); ctx.moveTo(x + 6, y + 1.5); ctx.lineTo(x + w - 6, y + 1.5); ctx.stroke();
+  /* 发光描边 + 角标 */
+  ctx.shadowColor = hov ? 'rgba(255,90,90,0.8)' : 'rgba(224,49,49,0.45)';
+  ctx.shadowBlur = hov ? 16 : 9;
+  ctx.strokeStyle = hov ? 'rgba(255,120,120,0.95)' : 'rgba(224,49,49,0.78)';
+  ctx.lineWidth = 1.5;
+  roundRectPath(x, y, w, h, 4); ctx.stroke();
+  ctx.shadowBlur = 0;
+  const tk = Math.min(10, w / 5);
+  ctx.strokeStyle = hov ? '#fff' : 'rgba(224,49,49,0.95)'; ctx.lineWidth = 2;
+  ctx.beginPath();
+  ctx.moveTo(x, y + tk); ctx.lineTo(x, y); ctx.lineTo(x + tk, y);
+  ctx.moveTo(x + w - tk, y + h); ctx.lineTo(x + w, y + h); ctx.lineTo(x + w, y + h - tk);
+  ctx.stroke();
   ctx.textAlign = 'center';
   if (hov) { ctx.fillStyle = 'rgba(255,255,255,0.92)'; ctx.font = 'bold 15px ' + FONT; ctx.fillText('▸', x + 18, y + h / 2 - (sub ? 4 : 8)); }
   ctx.fillStyle = '#fff';
@@ -159,6 +185,47 @@ function drawButton(x, y, w, h, label, sub, action) {
 
 /* 胶片颗粒 */
 let grainPat = null, grainT = 0;
+/* 扫描线氛围（缓存图案） */
+let scanPat = null;
+function drawScanlines(alpha = 0.045) {
+  if (!scanPat) {
+    const c = document.createElement('canvas'); c.width = 4; c.height = 4;
+    const g = c.getContext('2d');
+    g.fillStyle = 'rgba(255,255,255,1)';
+    g.fillRect(0, 0, 4, 1);
+    scanPat = ctx.createPattern(c, 'repeat');
+  }
+  ctx.save();
+  ctx.globalAlpha = alpha;
+  ctx.fillStyle = scanPat;
+  ctx.fillRect(0, 0, W, H);
+  ctx.restore();
+}
+
+/* 斜切能量格（血/盾共用） */
+function slantBar(x, y, w, h, filled, colFill, colGlow) {
+  const sk = Math.min(5, h * 0.4);
+  ctx.save();
+  ctx.beginPath();
+  ctx.moveTo(x + sk, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w - sk, y + h); ctx.lineTo(x, y + h);
+  ctx.closePath();
+  ctx.fillStyle = 'rgba(255,255,255,0.10)'; ctx.fill();
+  ctx.strokeStyle = 'rgba(255,255,255,0.16)'; ctx.lineWidth = 1; ctx.stroke();
+  if (filled) {
+    ctx.fillStyle = colGlow;
+    ctx.beginPath();
+    ctx.moveTo(x + sk, y); ctx.lineTo(x + w, y); ctx.lineTo(x + w - sk, y + h); ctx.lineTo(x, y + h);
+    ctx.closePath(); ctx.fill();
+    const g = ctx.createLinearGradient(x, y, x, y + h);
+    g.addColorStop(0, colFill);
+    g.addColorStop(1, 'rgba(255,255,255,0.30)');
+    ctx.fillStyle = g;
+    ctx.beginPath();
+    ctx.moveTo(x + sk + 1, y + 1); ctx.lineTo(x + w - 1, y + 1); ctx.lineTo(x + w - sk - 1, y + h - 1); ctx.lineTo(x + 1, y + h - 1);
+    ctx.closePath(); ctx.fill();
+  }
+  ctx.restore();
+}
 function drawGrain() {
   if (!grainPat) {
     const c = document.createElement('canvas'); c.width = c.height = 140;
@@ -2152,6 +2219,9 @@ function renderHUD() {
 
   /* 左上: 波次信息 */
   ctx.textAlign = 'left';
+  /* HUD 玻璃底板 */
+  panel(14, 14, 218, 148, { alpha: 0.055, r: 8 });
+  /* 波次红块 + 发光数字 */
   ctx.fillStyle = '#e03131';
   ctx.fillRect(24, 24, 9, 9);
   ls('2px');
@@ -2159,18 +2229,18 @@ function renderHUD() {
   ctx.font = EN;
   ctx.fillText('WAVE ' + ('0' + wave).slice(-2), 41, 33);
   ls('0px');
+  ctx.shadowColor = 'rgba(224,49,49,0.55)'; ctx.shadowBlur = 12;
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 30px ' + FONT;
   ctx.fillText('第 ' + wave + ' 波', 24, 62);
+  ctx.shadowBlur = 0;
   /* 生命 & 护盾 */
   for (let i2 = 0; i2 < 5; i2++) {
-    ctx.fillStyle = i2 < player.hp ? '#ff5252' : 'rgba(255,255,255,0.16)';
-    roundRectPath(24 + i2 * 24, 74, 19, 12, 3); ctx.fill();
+    slantBar(24 + i2 * 24, 74, 20, 12, i2 < player.hp, '#ff5252', 'rgba(255,82,82,0.35)');
   }
   if (player.shield > 0)
     for (let i2 = 0; i2 < player.shield; i2++) {
-      ctx.fillStyle = '#8fb0ff';
-      roundRectPath(148 + i2 * 18, 75, 13, 10, 3); ctx.fill();
+      slantBar(150 + i2 * 19, 75, 15, 10, true, '#8fb0ff', 'rgba(143,176,255,0.30)');
     }
   ctx.font = '13px ' + FONT;
   ctx.fillStyle = 'rgba(255,255,255,0.55)';
@@ -2624,8 +2694,8 @@ function renderTitle() {
   /* 版本角标 */
   ctx.fillStyle = '#e03131'; ctx.fillRect(84, 50, 8, 8);
   ls('2px');
-  ctx.fillStyle = 'rgba(255,255,255,0.32)'; ctx.font = EN;
-  ctx.fillText('TIME-FREEZE ARENA · v5.0', 100, 58);
+  ctx.fillStyle = 'rgba(255,255,255,0.45)'; ctx.font = EN;
+  ctx.fillText('FREEZE ARENA · v5.42', 100, 58);
   ls('0px');
 
   /* 背景: 缓慢漂浮的冻结子弹 */
@@ -2678,13 +2748,19 @@ function renderTitle() {
   ctx.textAlign = 'left';
   ctx.fillStyle = '#e03131';
   ctx.fillRect(84, 148, 46, 4);
+  /* 标题冰蓝余晖(冷光衬红句点) */
+  ctx.save();
+  ctx.shadowColor = 'rgba(120,170,255,0.35)'; ctx.shadowBlur = 26;
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 84px ' + FONT;
   ctx.fillText('你不动，', 80, 266);
   ctx.fillText('时间就停', 80, 360);
+  ctx.restore();
   const pw = ctx.measureText('时间就停').width;
+  ctx.shadowColor = 'rgba(224,49,49,0.85)'; ctx.shadowBlur = 18;
   ctx.fillStyle = '#e03131';
   ctx.fillText('。', 80 + pw, 360);
+  ctx.shadowBlur = 0;
   ls('4px');
   ctx.fillStyle = 'rgba(255,255,255,0.42)';
   ctx.font = EN;
@@ -2717,7 +2793,7 @@ function renderTitle() {
   ctx.textAlign = 'left';
   ctx.fillStyle = 'rgba(255,255,255,0.22)';
   ctx.font = '12px ' + FONT;
-  ctx.fillText('v5.3 · Q 切枪 · V 震动 · [ ] 音量 · M 静音 · ?demo 演示 · 素材 by gpt-image-2.5', 84, H - 26);
+  ctx.fillText('v5.42 · Q 切枪 · V 震动 · [ ] 音量 · M 静音 · ?demo 演示 · 素材 by gpt-image-2.5', 84, H - 26);
   if (typeof window.__bootErr !== 'undefined') {
     ctx.fillStyle = '#ff7b7b'; ctx.font = '12px ' + FONT;
     ctx.fillText('启动异常: ' + window.__bootErr, 84, H - 10);
@@ -2725,10 +2801,11 @@ function renderTitle() {
 
   iconBtn(W - 44, 38, 17, toggleFullscreen, drawFsGlyph);
   drawVignette();
+  drawScanlines();
   ctx.textAlign = 'right';
   ctx.fillStyle = 'rgba(255,255,255,0.3)';
   ctx.font = '11px ' + FONT;
-  ctx.fillText('v5.3', W - 8, H - 8);
+  ctx.fillText('v5.42', W - 8, H - 8);
   drawGrain();
   drawCrosshair();
 }
