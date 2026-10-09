@@ -314,7 +314,7 @@ function loadImg(name, src) {
   return new Promise(res => {
     const im = new Image();
     im.onload = () => { IMG[name] = im; res(); };
-    im.onerror = () => res();
+    im.onerror = () => { console.error('IMG FAIL: ' + src); res(); };
     im.src = src;
   });
 }
@@ -330,6 +330,7 @@ Promise.all([
   loadImg('floor', 'assets/floor.png'),
   loadImg('cover', 'assets/cover.png'),
 ]).then(() => {
+  console.log('ASSETS LOADED: ' + Object.keys(IMG).join(','));
   assetsReady = true;
   if (!DEMO) {
     if (new URLSearchParams(location.search).has('codex')) state = 'codex';
