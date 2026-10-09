@@ -359,8 +359,11 @@ Promise.all([
 let AC = null, master = null, muted = false, padGain = null;
 try { localStorage.removeItem('tf_muted'); } catch (e) {}
 function initAudio() {
-  if (AC) { AC.resume(); return; }
+  if (AC) { if (AC.state === 'suspended') AC.resume().catch(() => {}); return; }
+  try {
   AC = new (window.AudioContext || window.webkitAudioContext)();
+  if (AC.state === 'suspended') AC.resume().catch(() => {});
+  console.log('AUDIO state:', AC.state, 'rate:', AC.sampleRate);
   master = AC.createGain(); master.gain.value = muted ? 0 : settings.vol;
   master.connect(AC.destination);
   const len = AC.sampleRate * 2;
@@ -381,6 +384,7 @@ function initAudio() {
   });
   const droneGain = AC.createGain(); droneGain.gain.value = 0.045;
   dlp.connect(droneGain); droneGain.connect(master);
+  } catch (e) { console.error('AUDIO INIT FAIL:', e && e.message); AC = null; }
 }
 function noiseHit(dur, type, freq, vol, sweepTo) {
   if (!AC) return;
@@ -460,6 +464,9 @@ addEventListener('keydown', e => {
   if ((e.code === 'KeyR') && state === 'playing') tryReload();
 });
 addEventListener('keyup', e => keys[e.code] = false);
+document.addEventListener('visibilitychange', () => {
+  if (!document.hidden && AC && AC.state === 'suspended') AC.resume().catch(() => {});
+});
 let canvasRect = canvas.getBoundingClientRect();
 addEventListener('resize', () => { canvasRect = canvas.getBoundingClientRect(); });
 canvas.addEventListener('mousemove', e => {
