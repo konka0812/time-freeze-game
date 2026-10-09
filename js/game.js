@@ -135,7 +135,7 @@ const GLOW_PLAYER = () => glowFor('p', 'rgba(190,212,255,0.9)');
 const GLOW_ENEMY  = () => glowFor('e', 'rgba(255,60,60,0.95)');
 const GLOW_WARM   = () => glowFor('w', 'rgba(255,225,170,0.95)');
 let uiButtons = [];
-let titleBullets = null;
+let titleBullets = null, titleGlowCache = null;
 function drawButton(x, y, w, h, label, sub, action) {
   const hov = mouse.x >= x && mouse.x <= x + w && mouse.y >= y && mouse.y <= y + h;
   uiButtons.push({ x, y, w, h, action });
@@ -163,8 +163,13 @@ function drawButton(x, y, w, h, label, sub, action) {
   ctx.lineWidth = 1;
   ctx.beginPath(); ctx.moveTo(x + 6, y + 1.5); ctx.lineTo(x + w - 6, y + 1.5); ctx.stroke();
   /* 发光描边 + 角标 */
-  ctx.shadowColor = hov ? 'rgba(255,90,90,0.8)' : 'rgba(224,49,49,0.45)';
-  ctx.shadowBlur = hov ? 16 : 9;
+  /* 性能: 非hover用双层描边模拟发光, 省掉每帧shadowBlur */
+  if (!hov) {
+    ctx.strokeStyle = 'rgba(224,49,49,0.28)'; ctx.lineWidth = 4;
+    para(); ctx.stroke();
+  }
+  ctx.shadowColor = hov ? 'rgba(255,90,90,0.8)' : 'transparent';
+  ctx.shadowBlur = hov ? 16 : 0;
   ctx.strokeStyle = hov ? 'rgba(255,120,120,0.95)' : 'rgba(224,49,49,0.78)';
   ctx.lineWidth = 1.5;
   para(); ctx.stroke();
@@ -469,14 +474,15 @@ function touchXY(t) {
 }
 canvas.addEventListener('touchstart', e => {
   e.preventDefault(); initAudio();
-  if (state === 'title') { startGame(); return; }
-  if (state === 'dead') { restart(); return; }
   for (const t of e.changedTouches) {
     const p = touchXY(t);
     let hitUI = false;
+    /* UI 按钮优先命中(修复触屏点图鉴误触开始游戏) */
     for (const b of uiButtons)
       if (p.x >= b.x && p.x <= b.x + b.w && p.y >= b.y && p.y <= b.y + b.h) { b.action(); hitUI = true; break; }
     if (hitUI) continue;
+    if (state === 'title') { startGame(); continue; }
+    if (state === 'dead') { restart(); continue; }
     for (const b of ACT_BTNS)
       if (Math.hypot(p.x - b.x, p.y - b.y) <= b.r + 8) { b.action(); hitUI = true; break; }
     if (hitUI) continue;
@@ -1742,7 +1748,11 @@ function render() {
     /* 红霓虹角线(设计稿风格: 四角亮红L形) */
     const tk2 = Math.min(10, rc.w / 4, rc.h / 4);
     ctx.save();
-    ctx.shadowColor = 'rgba(255,60,60,0.7)'; ctx.shadowBlur = 6;
+    ctx.strokeStyle = 'rgba(255,82,82,0.30)'; ctx.lineWidth = 5;
+    ctx.beginPath();
+    ctx.moveTo(rc.x, rc.y + tk2); ctx.lineTo(rc.x, rc.y); ctx.lineTo(rc.x + tk2, rc.y);
+    ctx.moveTo(rc.x + rc.w - tk2, rc.y + rc.h); ctx.lineTo(rc.x + rc.w, rc.y + rc.h); ctx.lineTo(rc.x + rc.w, rc.y + rc.h - tk2);
+    ctx.stroke();
     ctx.strokeStyle = 'rgba(255,82,82,0.9)'; ctx.lineWidth = 2;
     ctx.beginPath();
     ctx.moveTo(rc.x, rc.y + tk2); ctx.lineTo(rc.x, rc.y); ctx.lineTo(rc.x + tk2, rc.y);
@@ -2262,11 +2272,9 @@ function renderHUD() {
   ctx.font = EN;
   ctx.fillText('WAVE ' + ('0' + wave).slice(-2), 41, 33);
   ls('0px');
-  ctx.shadowColor = 'rgba(224,49,49,0.55)'; ctx.shadowBlur = 12;
   ctx.fillStyle = '#fff';
   ctx.font = 'bold 30px ' + FONT;
   ctx.fillText('第 ' + wave + ' 波', 24, 62);
-  ctx.shadowBlur = 0;
   /* 生命 & 护盾 */
   for (let i2 = 0; i2 < 5; i2++) {
     slantBar(24 + i2 * 24, 74, 20, 12, i2 < player.hp, '#ff5252', 'rgba(255,82,82,0.35)');
@@ -2350,13 +2358,14 @@ function renderHUD() {
   ctx.moveTo(mx + tsk, my); ctx.lineTo(mx + mw, my); ctx.lineTo(mx + mw - tsk, my + 7); ctx.lineTo(mx, my + 7);
   ctx.closePath(); ctx.fill();
   const tw = Math.max(10, mw * clamp(timeSmooth, 0.04, 1));
-  ctx.save();
-  ctx.shadowColor = colGlow2; ctx.shadowBlur = 10;
+  ctx.fillStyle = colGlow2;
+  ctx.beginPath();
+  ctx.moveTo(mx + tsk - 2, my - 2); ctx.lineTo(mx + tw + 2, my - 2); ctx.lineTo(mx + tw - tsk + 2, my + 9); ctx.lineTo(mx - 2, my + 9);
+  ctx.closePath(); ctx.fill();
   ctx.fillStyle = colMain;
   ctx.beginPath();
   ctx.moveTo(mx + tsk, my); ctx.lineTo(mx + tw, my); ctx.lineTo(mx + tw - tsk, my + 7); ctx.lineTo(mx, my + 7);
   ctx.closePath(); ctx.fill();
-  ctx.restore();
   ctx.fillStyle = 'rgba(255,255,255,0.45)';
   ctx.beginPath();
   ctx.moveTo(mx + tsk + 2, my + 1); ctx.lineTo(mx + Math.max(12, tw - 2), my + 1); ctx.lineTo(mx + Math.max(6, tw - tsk - 2), my + 2.5); ctx.lineTo(mx + 2, my + 2.5);
@@ -2374,11 +2383,10 @@ function renderHUD() {
     ls('0px');
     ctx.fillStyle = 'rgba(255,255,255,0.14)';
     roundRectPath(W / 2 - 210, my + 26, 420, 9, 4); ctx.fill();
-    ctx.save();
-    ctx.shadowColor = 'rgba(255,82,82,0.8)'; ctx.shadowBlur = 10;
+    ctx.fillStyle = 'rgba(255,82,82,0.30)';
+    roundRectPath(W / 2 - 214, my + 22, Math.min(428, Math.max(16, 420 * boss.hp / boss.hpMax) + 8), 17, 6); ctx.fill();
     ctx.fillStyle = '#ff5252';
     roundRectPath(W / 2 - 210, my + 26, Math.max(8, 420 * boss.hp / boss.hpMax), 9, 4); ctx.fill();
-    ctx.restore();
     ctx.fillStyle = '#fff'; ctx.font = 'bold 12px ' + FONT; ctx.textAlign = 'center';
     ctx.fillText(Math.ceil(boss.hp) + ' / ' + boss.hpMax, W / 2, my + 52);
     ls('0px');
@@ -2772,10 +2780,9 @@ function renderTitle() {
     const h = H - 140, w = h * (im.width / im.height);
     const fl = Math.sin(performance.now() / 1600) * 5;
     const cx = W - w - 70, cy = 70 + fl;
-    ctx.save();
-    ctx.shadowColor = 'rgba(0,0,0,0.55)'; ctx.shadowBlur = 30; ctx.shadowOffsetY = 10;
+    ctx.fillStyle = 'rgba(0,0,0,0.45)';
+    ctx.fillRect(cx + 10, cy + 12, w, h);
     ctx.drawImage(im, cx, cy, w, h);
-    ctx.restore();
     ctx.strokeStyle = 'rgba(255,255,255,0.18)'; ctx.lineWidth = 1;
     ctx.strokeRect(cx - 0.5, cy - 0.5, w + 1, h + 1);
     ctx.strokeStyle = 'rgba(224,49,49,0.8)'; ctx.lineWidth = 2;
@@ -2796,29 +2803,32 @@ function renderTitle() {
   /* 左侧标题排版 */
   ctx.textAlign = 'left';
   /* 红色光速线(设计稿标志性元素) */
-  ctx.save();
-  ctx.shadowColor = 'rgba(224,49,49,0.9)'; ctx.shadowBlur = 8;
+  ctx.fillStyle = 'rgba(224,49,49,0.35)';
+  ctx.fillRect(0, 233, 68, 8); ctx.fillRect(0, 349, 50, 6);
   ctx.fillStyle = 'rgba(224,49,49,0.85)';
   ctx.fillRect(0, 236, 64, 3);
   ctx.fillRect(0, 352, 46, 2);
   ctx.globalAlpha = 0.5;
   ctx.fillRect(0, 244, 40, 1.5);
-  ctx.restore();
   ctx.fillStyle = '#e03131';
   ctx.fillRect(84, 148, 46, 4);
-  /* 标题冰蓝余晖(冷光衬红句点) */
-  ctx.save();
-  ctx.shadowColor = 'rgba(120,170,255,0.35)'; ctx.shadowBlur = 26;
-  ctx.fillStyle = '#fff';
-  ctx.font = 'bold 84px ' + FONT;
-  ctx.fillText('你不动，', 80, 266);
-  ctx.fillText('时间就停', 80, 360);
-  ctx.restore();
-  const pw = ctx.measureText('时间就停').width;
-  ctx.shadowColor = 'rgba(224,49,49,0.85)'; ctx.shadowBlur = 18;
-  ctx.fillStyle = '#e03131';
-  ctx.fillText('。', 80 + pw, 360);
-  ctx.shadowBlur = 0;
+  /* 标题发光层: 离屏预渲染缓存(避免每帧shadowBlur) */
+  if (!titleGlowCache) {
+    const c = document.createElement('canvas'); c.width = 700; c.height = 230;
+    const g = c.getContext('2d');
+    g.textAlign = 'left';
+    g.shadowColor = 'rgba(120,170,255,0.35)'; g.shadowBlur = 26;
+    g.fillStyle = '#fff';
+    g.font = 'bold 84px ' + FONT;
+    g.fillText('你不动，', 20, 96);
+    g.fillText('时间就停', 20, 190);
+    const pw2 = g.measureText('时间就停').width;
+    g.shadowColor = 'rgba(224,49,49,0.85)'; g.shadowBlur = 18;
+    g.fillStyle = '#e03131';
+    g.fillText('。', 20 + pw2, 190);
+    titleGlowCache = c;
+  }
+  ctx.drawImage(titleGlowCache, 60, 170);
   ls('4px');
   ctx.fillStyle = 'rgba(255,255,255,0.42)';
   ctx.font = EN;
